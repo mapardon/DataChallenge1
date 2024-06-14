@@ -16,20 +16,52 @@ class ModelIdentification:
         self.h1n1_labels = h1n1_labels
         self.seas_labels = seas_labels
         self.cv_folds = cv_folds
-        self.candidates = {"h1n1": list(), "seas": list()}  # stored tuples (model, perf, pars)
+        self.candidates = {"h1n1": list(), "seas": list()}  # stored tuples (model, [perf], [pars])
+
+    def main(self):
+        self.model_identification()
+        self.model_selection()
+        self.model_testing()
+
+    def model_exploitation(self):
+        """
+            Use final model to predict challenge data
+        """
+
+    def model_testing(self):
+        """
+            Train selected candidates on complete training set and assess performance on unused test set
+        """
+        for k in ["h1n1", "seas"]:
+            for m, auc, pars in self.candidates[k]:
+                m.fit()
 
     def model_selection(self):
+        """
+            Select most promising models based on performance on validation sets.
+            For now, we simply take the 10 best performing algorithms, but we could consider creation of heterogeneous
+            ensemble model
+        """
+        self.candidates["h1n1"] = sorted(self.candidates["h1n1"], reverse=True, key=lambda x: statistics.mean(x[1]))
+        self.candidates["seas"] = sorted(self.candidates["seas"], reverse=True, key=lambda x: statistics.mean(x[1]))
+
+    def model_identification(self):
+        """
+            Run parametric and structural identification of candidate algorithms
+        """
         self.lm()
         self.tree()
 
+        # print results of model identification operations
         for k in ["h1n1", "seas"]:
             print("{} performance:".format(k))
             for m, auc, pars in sorted(self.candidates[k], reverse=True, key=lambda x: statistics.mean(x[1])):
                 ModelIdentification.display_training_result(m, auc, pars)
 
-    def parametric_identification(self, model_h1n1, model_seas, is_reg_model=False):
+    def parametric_identification_cv(self, model_h1n1, model_seas, is_reg_model=False):
         """
-        Generic loop training the provided model on the dataset and assessing performance.
+            Generic loop training the provided model on the training set (split in training and validation
+            cross-validation folds) and assessing performance.
         """
 
         n_rows_fold = len(self.features) // self.cv_folds
@@ -67,6 +99,53 @@ class ModelIdentification:
 
         return h1n1_auc, thr_h1n1, fpr_h1n1, tpr_h1n1, seas_auc, thr_seas, fpr_seas, tpr_seas
 
+    # Methods corresponding to the "structural identification" step for the different models
+
+    def lm(self):
+        # Structural and parametric identification
+        lm_h1n1 = LinearRegression()
+        lm_seas = LinearRegression()
+        ret = self.parametric_identification_cv(lm_h1n1, lm_seas, True)
+        self.candidates["h1n1"].append((lm_h1n1, ret[0], str()))
+        self.candidates["seas"].append((lm_seas, ret[4], str()))
+
+        # Ridge is a basis of linear model we put it here
+        for alpha in [0.1, 0.5, 1.0, 5.0, 10.0, 20.0]:
+            ridge_h1n1 = RidgeClassifier(alpha=alpha)
+            ridge_seas = RidgeClassifier(alpha=alpha)
+            ret = self.parametric_identification_cv(ridge_h1n1, ridge_seas, True)
+            self.candidates["h1n1"].append((ridge_h1n1, ret[0], alpha))
+            self.candidates["seas"].append((ridge_seas, ret[4], alpha))
+
+        """
+        # Ensemble model
+        n = 10
+        lm_ens_h1n1 = VotingClassifier([("h1n1_" + str(i), LinearRegression()) for i in range(n)])
+        lm_ens_seas = VotingClassifier([("seas_" + str(i), LinearRegression()) for i in range(n)])
+        ret = self.parametric_identification(lm_ens_h1n1, lm_ens_seas, False)
+        print(lm_ens_h1n1.estimators_[0].coef_)
+        print(lm_ens_h1n1.estimators_[0].intercept_)
+        ModelIdentification.display_training_result(str(type(lm_ens_h1n1)) + " " + str(n), *ret)
+        """
+
+    def tree(self):
+        for c in ["entropy", "gini", "log_loss"]:
+            dtree_h1n1 = DecisionTreeClassifier(criterion=c)
+            dtree_seas = DecisionTreeClassifier(criterion=c)
+            ret = self.parametric_identification_cv(dtree_h1n1, dtree_seas, False)
+            self.candidates["h1n1"].append((dtree_h1n1, ret[0], c))
+            self.candidates["seas"].append((dtree_seas, ret[4], c))
+
+        for c in ["entropy", "gini", "log_loss"]:
+            for n in [10, 20, 50, 100]:
+                rf_h1n1 = RandomForestClassifier(criterion=c, n_estimators=n)
+                rf_seas = RandomForestClassifier(criterion=c, n_estimators=n)
+                ret = self.parametric_identification_cv(rf_h1n1, rf_seas, False)
+                self.candidates["h1n1"].append((rf_h1n1, ret[0], (c, n)))
+                self.candidates["seas"].append((rf_seas, ret[4], (c, n)))
+
+    # Display results
+
     @staticmethod
     def display_training_result(model, auc, pars):
 
@@ -88,48 +167,3 @@ class ModelIdentification:
         ax2.set_title("FPR and TPR for seasonal flu predictions ({})".format(header))
         ax2.legend()
         plt.show()
-
-    # Methods corresponding to the "structural identification" step for the different models
-
-    def lm(self):
-        # Structural and parametric identification
-        lm_h1n1 = LinearRegression()
-        lm_seas = LinearRegression()
-        ret = self.parametric_identification(lm_h1n1, lm_seas, True)
-        self.candidates["h1n1"].append((lm_h1n1, ret[0], str()))
-        self.candidates["seas"].append((lm_seas, ret[4], str()))
-
-        # Ridge is a basis of linear model we put it here
-        for alpha in [0.1, 0.5, 1.0, 5.0, 10.0, 20.0]:
-            ridge_h1n1 = RidgeClassifier(alpha=alpha)
-            ridge_seas = RidgeClassifier(alpha=alpha)
-            ret = self.parametric_identification(ridge_h1n1, ridge_seas, True)
-            self.candidates["h1n1"].append((ridge_h1n1, ret[0], alpha))
-            self.candidates["seas"].append((ridge_seas, ret[4], alpha))
-
-        """
-        # Ensemble model
-        n = 10
-        lm_ens_h1n1 = VotingClassifier([("h1n1_" + str(i), LinearRegression()) for i in range(n)])
-        lm_ens_seas = VotingClassifier([("seas_" + str(i), LinearRegression()) for i in range(n)])
-        ret = self.parametric_identification(lm_ens_h1n1, lm_ens_seas, False)
-        print(lm_ens_h1n1.estimators_[0].coef_)
-        print(lm_ens_h1n1.estimators_[0].intercept_)
-        ModelIdentification.display_training_result(str(type(lm_ens_h1n1)) + " " + str(n), *ret)
-        """
-
-    def tree(self):
-        for c in ["entropy", "gini", "log_loss"]:
-            dtree_h1n1 = DecisionTreeClassifier(criterion=c)
-            dtree_seas = DecisionTreeClassifier(criterion=c)
-            ret = self.parametric_identification(dtree_h1n1, dtree_seas, False)
-            self.candidates["h1n1"].append((dtree_h1n1, ret[0], c))
-            self.candidates["seas"].append((dtree_seas, ret[4], c))
-
-        for c in ["entropy", "gini", "log_loss"]:
-            for n in [10, 20, 50, 100]:
-                rf_h1n1 = RandomForestClassifier(criterion=c, n_estimators=n)
-                rf_seas = RandomForestClassifier(criterion=c, n_estimators=n)
-                ret = self.parametric_identification(rf_h1n1, rf_seas, False)
-                self.candidates["h1n1"].append((rf_h1n1, ret[0], (c, n)))
-                self.candidates["seas"].append((rf_seas, ret[4], (c, n)))
