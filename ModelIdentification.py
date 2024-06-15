@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from sklearn.ensemble import VotingClassifier, RandomForestClassifier
 from sklearn.linear_model import LinearRegression, RidgeClassifier
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.svm import SVC
 from sklearn.metrics import roc_auc_score, roc_curve
 
 from utils import sigmoid
@@ -18,9 +19,9 @@ class ModelIdentification:
         self.test_features = features.iloc[round(len(features) * 0.75):, :]
         self.h1n1_test_labels = h1n1_labels[round(len(features) * 0.75):]
         self.seas_test_labels = seas_labels[round(len(features) * 0.75):]
+
         self.cv_folds = cv_folds
         self.candidates = {"h1n1": list(), "seas": list()}  # stored tuples (model, [perf], [pars], reg_model)
-        self.finals = {"h1n1": list(), "seas": list()}
 
     def main(self):
         self.model_identification()
@@ -52,6 +53,8 @@ class ModelIdentification:
             for m, auc, pars, _ in sorted(self.candidates[k], reverse=True, key=lambda x: x[1]):
                 ModelIdentification.display_training_result(m, auc, pars)
 
+        print("\nAverage of bests: {}".format(statistics.mean([self.candidates["h1n1"][0][1], self.candidates["seas"][0][1]])))
+
     def model_selection(self):
         """
             Select most promising models based on performance on validation sets.
@@ -68,6 +71,7 @@ class ModelIdentification:
         """
         self.lm()
         self.tree()
+        self.svm()
 
         # print results of model identification operations
         print(" * MODEL IDENTIFICATION *")
@@ -159,6 +163,14 @@ class ModelIdentification:
                 ret = self.parametric_identification_cv(rf_h1n1, rf_seas, False)
                 self.candidates["h1n1"].append((rf_h1n1, ret[0], "(c={}, n={})".format(c, n), False))
                 self.candidates["seas"].append((rf_seas, ret[4], "(c={}, n={})".format(c, n), False))
+
+    def svm(self):
+        for kernel in ['linear', 'poly', 'rbf', 'sigmoid']:
+            svc_h1n1 = SVC(kernel=kernel, probability=True)
+            svc_seas = SVC(probability=True)
+            ret = self.parametric_identification_cv(svc_h1n1, svc_seas, False)
+            self.candidates["h1n1"].append((svc_h1n1, ret[0], "kernel={}".format(kernel), False))
+            self.candidates["seas"].append((svc_h1n1, ret[0], "kernel={}".format(kernel), False))
 
     # Display results
 

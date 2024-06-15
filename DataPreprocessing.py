@@ -12,6 +12,8 @@ class DataPreprocessing:
     def data_preprocessing(self):
         self.load_data()
         #self.exploratory_analysis()
+
+        # feature engineering
         self.feature_engineering()
         return self.features, self.h1n1_labels, self.seas_labels
 
