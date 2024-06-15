@@ -16,6 +16,7 @@ class ModelIdentification:
         self.train_features = features.iloc[:round(len(features) * 0.75), :]
         self.h1n1_train_labels = h1n1_labels[:round(len(features) * 0.75)]
         self.seas_train_labels = seas_labels[:round(len(features) * 0.75)]
+
         self.test_features = features.iloc[round(len(features) * 0.75):, :]
         self.h1n1_test_labels = h1n1_labels[round(len(features) * 0.75):]
         self.seas_test_labels = seas_labels[round(len(features) * 0.75):]

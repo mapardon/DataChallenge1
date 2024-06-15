@@ -14,7 +14,12 @@ class DataPreprocessing:
         #self.exploratory_analysis()
 
         # feature engineering
-        self.feature_engineering()
+        self.missing_values_imputation()
+        self.outlier_detection()
+        self.numerize_categorical_features()
+        self.features_scaling()
+        self.feature_selection()
+
         return self.features, self.h1n1_labels, self.seas_labels
 
     def load_data(self):
@@ -27,8 +32,8 @@ class DataPreprocessing:
         ds = ds.sample(frac=1)
 
         self.features = ds[ds.columns.to_list()[:-2]]
-        self.seas_labels = ds[["respondent_id", "seasonal_vaccine"]]
-        self.h1n1_labels = ds[["respondent_id", "h1n1_vaccine"]]
+        self.seas_labels = ds[["seasonal_vaccine"]]
+        self.h1n1_labels = ds[["h1n1_vaccine"]]
 
     def exploratory_analysis(self):
         print(" * Features dimension:\n{}".format(self.features.shape))
@@ -75,7 +80,7 @@ class DataPreprocessing:
             ax.set_title(feature.capitalize())
         plt.show()
 
-    def feature_engineering(self):
+    def missing_values_imputation(self):
         ds = self.features
         ds["h1n1_vaccine"] = self.h1n1_labels["h1n1_vaccine"]
         ds["seasonal_vaccine"] = self.seas_labels["seasonal_vaccine"]
@@ -83,7 +88,18 @@ class DataPreprocessing:
         # for now, we just remove missing data and non-numeric columns
         ds = ds[~ds.isnull().any(axis=1)]
         ds = ds.select_dtypes([np.number])
-        # self.features = ds[["respondent_id", "doctor_recc_h1n1", "opinion_h1n1_risk", "opinion_h1n1_vacc_effective", "opinion_seas_risk"]]
         self.features = ds.iloc[:, 1:-3]
         self.seas_labels = ds["seasonal_vaccine"]
         self.h1n1_labels = ds["h1n1_vaccine"]
+
+    def outlier_detection(self):
+        pass
+
+    def numerize_categorical_features(self):
+        pass
+
+    def features_scaling(self):
+        pass
+
+    def feature_selection(self):
+        pass
