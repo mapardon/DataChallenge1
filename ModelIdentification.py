@@ -27,7 +27,7 @@ class ModelIdentification:
     def main(self):
         self.model_identification()
         self.model_selection()
-        self.model_testing()
+        return self.model_testing()
 
     def model_exploitation(self):
         """
@@ -48,13 +48,16 @@ class ModelIdentification:
                 self.candidates[k][i] = (m, auc, *self.candidates[k][i][2:])
 
         # print results of testing of most promising models
-        print("\n * MODEL TESTING *")
-        for k in ["h1n1", "seas"]:
-            print("\n -> {} performance:".format(k))
-            for m, auc, pars, _ in sorted(self.candidates[k], reverse=True, key=lambda x: x[1]):
-                ModelIdentification.display_training_result(m, auc, pars)
+        if False:
+            print("\n * MODEL TESTING *")
+            for k in ["h1n1", "seas"]:
+                print("\n -> {} performance:".format(k))
+                for m, auc, pars, _ in sorted(self.candidates[k], reverse=True, key=lambda x: x[1]):
+                    ModelIdentification.display_training_result(m, auc, pars)
 
-        print("\nAverage of bests: {}".format(statistics.mean([self.candidates["h1n1"][0][1], self.candidates["seas"][0][1]])))
+        final_perf = statistics.mean([self.candidates["h1n1"][0][1], self.candidates["seas"][0][1]])
+        #print("\nAverage of bests: {}".format(final_perf))
+        return final_perf
 
     def model_selection(self):
         """
@@ -71,8 +74,11 @@ class ModelIdentification:
             Run parametric and structural identification of candidate algorithms
         """
         self.lm()
-        self.tree()
-        self.svm()
+        #self.tree()
+        #self.svm()
+
+        # TODO delete
+        return
 
         # print results of model identification operations
         print(" * MODEL IDENTIFICATION *")

@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
+from sklearn.impute import SimpleImputer, KNNImputer
 
 
 class DataPreprocessing:
@@ -9,12 +10,12 @@ class DataPreprocessing:
         self.h1n1_labels = None
         self.seas_labels = None
 
-    def data_preprocessing(self):
+    def data_preprocessing(self, m1, m2):
         self.load_data()
         #self.exploratory_analysis()
 
         # feature engineering
-        self.missing_values_imputation()
+        self.missing_values_imputation(m1, m2)
         self.outlier_detection()
         self.numerize_categorical_features()
         self.features_scaling()
@@ -32,8 +33,8 @@ class DataPreprocessing:
         ds = ds.sample(frac=1)
 
         self.features = ds[ds.columns.to_list()[:-2]]
-        self.seas_labels = ds[["seasonal_vaccine"]]
-        self.h1n1_labels = ds[["h1n1_vaccine"]]
+        self.h1n1_labels = ds["h1n1_vaccine"]
+        self.seas_labels = ds["seasonal_vaccine"]
 
     def exploratory_analysis(self):
         print(" * Features dimension:\n{}".format(self.features.shape))
@@ -80,17 +81,31 @@ class DataPreprocessing:
             ax.set_title(feature.capitalize())
         plt.show()
 
-    def missing_values_imputation(self):
-        ds = self.features
-        ds["h1n1_vaccine"] = self.h1n1_labels["h1n1_vaccine"]
-        ds["seasonal_vaccine"] = self.seas_labels["seasonal_vaccine"]
+    def missing_values_imputation(self, num_strat="remove", obj_strat="remove"):
 
-        # for now, we just remove missing data and non-numeric columns
-        ds = ds[~ds.isnull().any(axis=1)]
-        ds = ds.select_dtypes([np.number])
-        self.features = ds.iloc[:, 1:-3]
-        self.seas_labels = ds["seasonal_vaccine"]
-        self.h1n1_labels = ds["h1n1_vaccine"]
+        if num_strat == "remove" or obj_strat == "remove":
+            self.features = self.features[~self.features.isnull().any(axis=1)]
+
+        else:
+            num_features = self.features.select_dtypes(["number"])
+            obj_features = self.features.select_dtypes(["object"])
+
+            if num_strat in ["mean", "median", "most_frequent"]:
+                imp = SimpleImputer(missing_values=np.nan, strategy=num_strat)
+                imp.fit(num_features)
+                num_features = pd.DataFrame(imp.transform(num_features))
+
+            elif num_strat == "knn":
+                imp = KNNImputer(n_neighbors=5)
+                num_features = pd.DataFrame(imp.fit_transform(num_features))
+
+            if obj_strat == "most_frequent":
+                imp = SimpleImputer(missing_values=np.nan, strategy="most_frequent")
+                imp.fit(obj_features)
+                obj_features = pd.DataFrame(imp.transform(obj_features))
+
+            self.features = pd.concat([num_features, obj_features], axis="columns")
+        print(self.features.shape)
 
     def outlier_detection(self):
         pass
@@ -102,4 +117,13 @@ class DataPreprocessing:
         pass
 
     def feature_selection(self):
-        pass
+        ds = self.features
+        ds["h1n1_vaccine"] = self.h1n1_labels
+        ds["seasonal_vaccine"] = self.seas_labels
+
+        # For now, we just remove non-numeric columns
+        ds = ds.select_dtypes([np.number])
+
+        self.features = ds.iloc[:, 1:-3]
+        self.h1n1_labels = ds["h1n1_vaccine"]
+        self.seas_labels = ds["seasonal_vaccine"]
