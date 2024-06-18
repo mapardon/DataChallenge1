@@ -21,6 +21,8 @@ class DataPreprocessing:
         self.features_scaling()
         self.feature_selection()
 
+        print(self.features.shape)
+
         return self.features, self.h1n1_labels, self.seas_labels
 
     def load_data(self):
@@ -31,8 +33,10 @@ class DataPreprocessing:
         ds = self.features
         ds[["h1n1_vaccine", "seasonal_vaccine"]] = flu_labels[["h1n1_vaccine", "seasonal_vaccine"]]
         ds = ds.sample(frac=1)
+        ds.reset_index(inplace=True)
+        ds.drop(["index"], axis="columns", inplace=True)
 
-        self.features = ds[ds.columns.to_list()[:-2]]
+        self.features = ds[ds.columns.to_list()[1:-2]]
         self.h1n1_labels = ds["h1n1_vaccine"]
         self.seas_labels = ds["seasonal_vaccine"]
 
@@ -88,24 +92,25 @@ class DataPreprocessing:
 
         else:
             num_features = self.features.select_dtypes(["number"])
+            num_features_name = num_features.columns.to_list()
             obj_features = self.features.select_dtypes(["object"])
+            obj_features_name = obj_features.columns.to_list()
 
             if num_strat in ["mean", "median", "most_frequent"]:
                 imp = SimpleImputer(missing_values=np.nan, strategy=num_strat)
                 imp.fit(num_features)
-                num_features = pd.DataFrame(imp.transform(num_features))
+                num_features = pd.DataFrame(imp.transform(num_features), columns=num_features_name)
 
             elif num_strat == "knn":
                 imp = KNNImputer(n_neighbors=5)
-                num_features = pd.DataFrame(imp.fit_transform(num_features))
+                num_features = pd.DataFrame(imp.fit_transform(num_features), columns=num_features_name)
 
             if obj_strat == "most_frequent":
                 imp = SimpleImputer(missing_values=np.nan, strategy="most_frequent")
                 imp.fit(obj_features)
-                obj_features = pd.DataFrame(imp.transform(obj_features))
+                obj_features = pd.DataFrame(imp.transform(obj_features), columns=obj_features_name)
 
             self.features = pd.concat([num_features, obj_features], axis="columns")
-        print(self.features.shape)
 
     def outlier_detection(self):
         pass
@@ -124,6 +129,6 @@ class DataPreprocessing:
         # For now, we just remove non-numeric columns
         ds = ds.select_dtypes([np.number])
 
-        self.features = ds.iloc[:, 1:-3]
+        self.features = ds.iloc[:, :-3]
         self.h1n1_labels = ds["h1n1_vaccine"]
         self.seas_labels = ds["seasonal_vaccine"]
