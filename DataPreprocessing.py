@@ -29,7 +29,7 @@ class DataPreprocessing:
         self.features = pd.read_csv("data/training_set_features.csv")
         flu_labels = pd.read_csv("data/training_set_labels.csv")
 
-        # shuffle dataset
+        # shuffle dataset (and reset indexes)
         ds = self.features
         ds[["h1n1_vaccine", "seasonal_vaccine"]] = flu_labels[["h1n1_vaccine", "seasonal_vaccine"]]
         ds = ds.sample(frac=1)
@@ -87,30 +87,55 @@ class DataPreprocessing:
 
     def missing_values_imputation(self, num_strat="remove", obj_strat="remove"):
 
-        if num_strat == "remove" or obj_strat == "remove":
-            self.features = self.features[~self.features.isnull().any(axis=1)]
+        if num_strat == "remove" and obj_strat == "remove":
+            self.features.dropna(axis=0, inplace=True)
 
         else:
-            num_features = self.features.select_dtypes(["number"])
-            num_features_name = num_features.columns.to_list()
-            obj_features = self.features.select_dtypes(["object"])
-            obj_features_name = obj_features.columns.to_list()
+            if num_strat == "remove":
+                self.features["h1n1_vaccine"] = self.h1n1_labels
+                self.features["seasonal_vaccine"] = self.seas_labels
+                self.features.dropna(axis=0, subset=self.features.select_dtypes([np.number]).columns, inplace=True)
+                self.features.reset_index(inplace=True)
+                self.h1n1_labels = self.features["h1n1_vaccine"]
+                self.seas_labels = self.features["seasonal_vaccine"]
+                self.features.drop(["index", "h1n1_vaccine", "seasonal_vaccine"], axis="columns", inplace=True)
 
-            if num_strat in ["mean", "median", "most_frequent"]:
-                imp = SimpleImputer(missing_values=np.nan, strategy=num_strat)
-                imp.fit(num_features)
-                num_features = pd.DataFrame(imp.transform(num_features), columns=num_features_name)
+            else:
+                num_features = self.features.select_dtypes(["number"])
+                num_features_name = num_features.columns.to_list()
+                obj_features = self.features.select_dtypes(["object"])
 
-            elif num_strat == "knn":
-                imp = KNNImputer(n_neighbors=5)
-                num_features = pd.DataFrame(imp.fit_transform(num_features), columns=num_features_name)
+                if num_strat in ["mean", "median", "most_frequent"]:
+                    imp = SimpleImputer(missing_values=np.nan, strategy=num_strat)
+                    imp.fit(num_features)
+                    num_features = pd.DataFrame(imp.transform(num_features), columns=num_features_name)
 
-            if obj_strat == "most_frequent":
-                imp = SimpleImputer(missing_values=np.nan, strategy="most_frequent")
-                imp.fit(obj_features)
-                obj_features = pd.DataFrame(imp.transform(obj_features), columns=obj_features_name)
+                elif num_strat == "knn":
+                    imp = KNNImputer(n_neighbors=5)
+                    num_features = pd.DataFrame(imp.fit_transform(num_features), columns=num_features_name)
 
-            self.features = pd.concat([num_features, obj_features], axis="columns")
+                self.features = pd.concat([num_features, obj_features], axis="columns")
+
+            if obj_strat == "remove":
+                self.features["h1n1_vaccine"] = self.h1n1_labels
+                self.features["seasonal_vaccine"] = self.seas_labels
+                self.features.dropna(axis=0, subset=self.features.select_dtypes(["object"]).columns, inplace=True)
+                self.features.reset_index(inplace=True)
+                self.h1n1_labels = self.features["h1n1_vaccine"]
+                self.seas_labels = self.features["seasonal_vaccine"]
+                self.features.drop(["index", "h1n1_vaccine", "seasonal_vaccine"], axis="columns", inplace=True)
+
+            else:
+                num_features = self.features.select_dtypes(["number"])
+                obj_features = self.features.select_dtypes(["object"])
+                obj_features_name = obj_features.columns.to_list()
+
+                if obj_strat == "most_frequent":
+                    imp = SimpleImputer(missing_values=np.nan, strategy="most_frequent")
+                    imp.fit(obj_features)
+                    obj_features = pd.DataFrame(imp.transform(obj_features), columns=obj_features_name)
+
+                self.features = pd.concat([num_features, obj_features], axis="columns", ignore_index=True)
 
     def outlier_detection(self):
         pass

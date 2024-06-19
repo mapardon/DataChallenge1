@@ -7,7 +7,6 @@ from ModelIdentification import ModelIdentification
 if __name__ == '__main__':
 
     for m1 in ["knn", "remove", "mean", "median", "most_frequent"]:
-        #for m2 in ["remove", "most_frequent"]:
         for m2 in ["remove", "most_frequent"]:
             tmp = list()
             for _ in range(5):
