@@ -12,7 +12,7 @@ from utils import sigmoid
 
 
 class ModelIdentification:
-    def __init__(self, features: pd.DataFrame, h1n1_labels: pd.DataFrame, seas_labels: pd.DataFrame, cv_folds: int):
+    def __init__(self, features: pd.DataFrame, h1n1_labels: pd.DataFrame, seas_labels: pd.DataFrame, cv_folds: int, verbose=False):
         self.train_features = features.iloc[:round(len(features) * 0.75), :]
         self.h1n1_train_labels = h1n1_labels[:round(len(features) * 0.75)]
         self.seas_train_labels = seas_labels[:round(len(features) * 0.75)]
@@ -23,11 +23,7 @@ class ModelIdentification:
 
         self.cv_folds = cv_folds
         self.candidates = {"h1n1": list(), "seas": list()}  # stored tuples (model, [perf], [pars], reg_model)
-
-    def main(self):
-        self.model_identification()
-        self.model_selection()
-        return self.model_testing()
+        self.verbose = verbose
 
     def model_exploitation(self):
         """
@@ -48,7 +44,7 @@ class ModelIdentification:
                 self.candidates[k][i] = (m, auc, *self.candidates[k][i][2:])
 
         # print results of testing of most promising models
-        if False:
+        if self.verbose:
             print("\n * MODEL TESTING *")
             for k in ["h1n1", "seas"]:
                 print("\n -> {} performance:".format(k))
@@ -56,7 +52,9 @@ class ModelIdentification:
                     ModelIdentification.display_training_result(m, auc, pars)
 
         final_perf = statistics.mean([self.candidates["h1n1"][0][1], self.candidates["seas"][0][1]])
-        #print("\nAverage of bests: {}".format(final_perf))
+        if self.verbose:
+            print("\nAverage of bests: {}".format(final_perf))
+
         return final_perf
 
     def model_selection(self):
@@ -69,23 +67,26 @@ class ModelIdentification:
         self.candidates["h1n1"] = sorted(self.candidates["h1n1"], reverse=True, key=lambda x: statistics.mean(x[1]))[:min(10, len(self.candidates["h1n1"]))]
         self.candidates["seas"] = sorted(self.candidates["seas"], reverse=True, key=lambda x: statistics.mean(x[1]))[:min(10, len(self.candidates["h1n1"]))]
 
-    def model_identification(self):
+    def model_identification(self, models):
         """
+            :param models: List of models to test. Options include 'lm', 'tree', 'svm'
             Run parametric and structural identification of candidate algorithms
         """
-        self.lm()
-        #self.tree()
-        #self.svm()
 
-        # TODO delete
-        return
+        if "lm" in models:
+            self.lm()
+        if "tree" in models:
+            self.tree()
+        if "svm" in models:
+            self.svm()
 
         # print results of model identification operations
-        print(" * MODEL IDENTIFICATION *")
-        for k in ["h1n1", "seas"]:
-            print("\n -> {} performance:".format(k))
-            for m, auc, pars, _ in sorted(self.candidates[k], reverse=True, key=lambda x: statistics.mean(x[1])):
-                ModelIdentification.display_training_result(m, auc, pars)
+        if self.verbose:
+            print(" * MODEL IDENTIFICATION *")
+            for k in ["h1n1", "seas"]:
+                print("\n -> {} performance:".format(k))
+                for m, auc, pars, _ in sorted(self.candidates[k], reverse=True, key=lambda x: statistics.mean(x[1])):
+                    ModelIdentification.display_training_result(m, auc, pars)
 
     def parametric_identification_cv(self, model_h1n1, model_seas, is_reg_model=False):
         """

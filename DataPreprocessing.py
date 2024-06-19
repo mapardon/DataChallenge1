@@ -10,19 +10,7 @@ class DataPreprocessing:
         self.h1n1_labels = None
         self.seas_labels = None
 
-    def data_preprocessing(self, m1, m2):
-        self.load_data()
-        #self.exploratory_analysis()
-
-        # feature engineering
-        self.missing_values_imputation(m1, m2)
-        self.outlier_detection()
-        self.numerize_categorical_features()
-        self.features_scaling()
-        self.feature_selection()
-
-        print(self.features.shape)
-
+    def get_datasets(self):
         return self.features, self.h1n1_labels, self.seas_labels
 
     def load_data(self):
@@ -33,8 +21,7 @@ class DataPreprocessing:
         ds = self.features
         ds[["h1n1_vaccine", "seasonal_vaccine"]] = flu_labels[["h1n1_vaccine", "seasonal_vaccine"]]
         ds = ds.sample(frac=1)
-        ds.reset_index(inplace=True)
-        ds.drop(["index"], axis="columns", inplace=True)
+        ds.reset_index(inplace=True, drop=True)
 
         self.features = ds[ds.columns.to_list()[1:-2]]
         self.h1n1_labels = ds["h1n1_vaccine"]
@@ -88,17 +75,17 @@ class DataPreprocessing:
     def missing_values_imputation(self, num_strat="remove", obj_strat="remove"):
 
         if num_strat == "remove" and obj_strat == "remove":
-            self.features.dropna(axis=0, inplace=True)
+            na_idx = self.features.isnull().any(axis="columns")
+            self.features = self.features[~na_idx].reset_index(drop=True)
+            self.h1n1_labels = self.h1n1_labels[~na_idx].reset_index(drop=True)
+            self.seas_labels = self.seas_labels[~na_idx].reset_index(drop=True)
 
         else:
             if num_strat == "remove":
-                self.features["h1n1_vaccine"] = self.h1n1_labels
-                self.features["seasonal_vaccine"] = self.seas_labels
-                self.features.dropna(axis=0, subset=self.features.select_dtypes([np.number]).columns, inplace=True)
-                self.features.reset_index(inplace=True)
-                self.h1n1_labels = self.features["h1n1_vaccine"]
-                self.seas_labels = self.features["seasonal_vaccine"]
-                self.features.drop(["index", "h1n1_vaccine", "seasonal_vaccine"], axis="columns", inplace=True)
+                na_idx = self.features.select_dtypes([np.number]).isnull().any(axis="columns")
+                self.features = self.features[~na_idx].reset_index(drop=True)
+                self.h1n1_labels = self.h1n1_labels[~na_idx].reset_index(drop=True)
+                self.seas_labels = self.seas_labels[~na_idx].reset_index(drop=True)
 
             else:
                 num_features = self.features.select_dtypes(["number"])
@@ -117,13 +104,10 @@ class DataPreprocessing:
                 self.features = pd.concat([num_features, obj_features], axis="columns")
 
             if obj_strat == "remove":
-                self.features["h1n1_vaccine"] = self.h1n1_labels
-                self.features["seasonal_vaccine"] = self.seas_labels
-                self.features.dropna(axis=0, subset=self.features.select_dtypes(["object"]).columns, inplace=True)
-                self.features.reset_index(inplace=True)
-                self.h1n1_labels = self.features["h1n1_vaccine"]
-                self.seas_labels = self.features["seasonal_vaccine"]
-                self.features.drop(["index", "h1n1_vaccine", "seasonal_vaccine"], axis="columns", inplace=True)
+                na_idx = self.features.select_dtypes(["object"]).isnull().any(axis="columns")
+                self.features = self.features[~na_idx].reset_index(drop=True)
+                self.h1n1_labels = self.h1n1_labels[~na_idx].reset_index(drop=True)
+                self.seas_labels = self.seas_labels[~na_idx].reset_index(drop=True)
 
             else:
                 num_features = self.features.select_dtypes(["number"])
@@ -138,7 +122,10 @@ class DataPreprocessing:
                 self.features = pd.concat([num_features, obj_features], axis="columns", ignore_index=True)
 
     def outlier_detection(self):
-        pass
+        """
+        lof = LocalOutlierFactor(n_neighbors=i)
+        res = list(lof.fit_predict(features))
+        """
 
     def numerize_categorical_features(self):
         pass
@@ -147,13 +134,5 @@ class DataPreprocessing:
         pass
 
     def feature_selection(self):
-        ds = self.features
-        ds["h1n1_vaccine"] = self.h1n1_labels
-        ds["seasonal_vaccine"] = self.seas_labels
-
         # For now, we just remove non-numeric columns
-        ds = ds.select_dtypes([np.number])
-
-        self.features = ds.iloc[:, :-3]
-        self.h1n1_labels = ds["h1n1_vaccine"]
-        self.seas_labels = ds["seasonal_vaccine"]
+        self.features = self.features.select_dtypes([np.number])
