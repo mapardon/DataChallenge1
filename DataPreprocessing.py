@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 from sklearn.impute import SimpleImputer, KNNImputer
+from sklearn.neighbors import LocalOutlierFactor
 
 
 class DataPreprocessing:
@@ -121,11 +122,17 @@ class DataPreprocessing:
 
                 self.features = pd.concat([num_features, obj_features], axis="columns", ignore_index=True)
 
-    def outlier_detection(self):
-        """
-        lof = LocalOutlierFactor(n_neighbors=i)
-        res = list(lof.fit_predict(features))
-        """
+    def outlier_detection(self, n=0):
+        removed = int()
+        if n > 1:
+            num_features = self.features.select_dtypes([np.number])
+            lof = LocalOutlierFactor(n_neighbors=n)
+            idx = np.where(lof.fit_predict(num_features) > 0, True, False)  # lof returns -1/1 which we change to use results as indexes
+            removed = num_features.shape[0] - np.sum(idx)
+            self.features = self.features[idx]
+            self.h1n1_labels = self.h1n1_labels[idx]
+            self.seas_labels = self.seas_labels[idx]
+        return removed
 
     def numerize_categorical_features(self):
         pass
