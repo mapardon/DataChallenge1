@@ -14,6 +14,8 @@ def machine_learning_procedure():
                 for scaling in [True, False]:
                     analytics.append([[], []])
                     n_removed = list()
+                    models = list()
+
                     for _ in range(N):
                         # Data preprocessing
                         dp = DataPreprocessing()
@@ -32,16 +34,19 @@ def machine_learning_procedure():
                         mi = ModelIdentification(*dp.get_datasets(), 5)
                         mi.model_identification(["lm"])
                         mi.model_selection()
-                        analytics[-1][-1].append(mi.model_testing())
+                        best_models, best_perf = mi.model_testing()
+                        models.append(best_models)
+                        analytics[-1][-1].append(best_perf)
 
+                    best_model = max(set(models), key=models.count)
                     n_rem_summary = "{}-{}".format(min(n_removed), max(n_removed))
-                    analytics[-1][0] += [imp_num, imp_obj, nn, n_rem_summary, scaling]
+                    analytics[-1][0] += [best_model, imp_num, imp_obj, nn, n_rem_summary, scaling]
 
     for conf, res in sorted(analytics, reverse=True, key=lambda x: statistics.mean(x[1])):
-        print("imp_num={}, imp_pbj={}, knn={}({}), scaling={} -> avg: {}, stdev: {}".format(conf[0], conf[1], conf[2],
-                                                                                            conf[3], conf[4],
-                                                                                            round(statistics.mean(res), 5),
-                                                                                            round(statistics.stdev(res), 5)))
+        print("imp_num={}, imp_pbj={}, knn={}({}), scaling={}, {} -> avg: {}, stdev: {}".format(conf[1], conf[2], conf[3],
+                                                                                                conf[4], conf[5], conf[0],
+                                                                                                round(statistics.mean(res), 5),
+                                                                                                round(statistics.stdev(res), 5)))
 
 
 if __name__ == '__main__':

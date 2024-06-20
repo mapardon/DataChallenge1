@@ -22,7 +22,7 @@ class ModelIdentification:
         self.seas_test_labels = seas_labels[round(len(features) * 0.75):]
 
         self.cv_folds = cv_folds
-        self.candidates = {"h1n1": list(), "seas": list()}  # stored tuples (model, [perf], [pars], reg_model)
+        self.candidates = {"h1n1": list(), "seas": list()}  # stored tuples (model, [perf], [pars], is_reg_model)
         self.verbose = verbose
 
     def model_exploitation(self):
@@ -42,20 +42,23 @@ class ModelIdentification:
                 y_i_ts_pred_prob = sigmoid(m.predict(self.test_features)) if self.candidates[k][i][3] else m.predict_proba(self.test_features)[:, 1]
                 auc = roc_auc_score(self.h1n1_test_labels if k == "h1n1" else self.seas_test_labels, y_i_ts_pred_prob)
                 self.candidates[k][i] = (m, auc, *self.candidates[k][i][2:])
+            self.candidates[k].sort(reverse=True, key=lambda x: x[1])
 
         # print results of testing of most promising models
         if self.verbose:
             print("\n * MODEL TESTING *")
             for k in ["h1n1", "seas"]:
                 print("\n -> {} performance:".format(k))
-                for m, auc, pars, _ in sorted(self.candidates[k], reverse=True, key=lambda x: x[1]):
+                for m, auc, pars, _ in self.candidates[k]:
                     ModelIdentification.display_training_result(m, auc, pars)
 
-        final_perf = statistics.mean([self.candidates["h1n1"][0][1], self.candidates["seas"][0][1]])
+        best_models, best_perf = ("{}/{}".format(str(self.candidates["h1n1"][0][0]), str(self.candidates["seas"][0][0])),
+                                  statistics.mean([self.candidates["h1n1"][0][1], self.candidates["seas"][0][1]]))
         if self.verbose:
-            print("\nAverage of bests: {}".format(final_perf))
+            print([statistics.mean([i[1], j[1]]) for i, j in zip(self.candidates["h1n1"], self.candidates["seas"])])
+            print("\nAverage of bests: {}".format(best_perf))
 
-        return final_perf
+        return best_models, best_perf
 
     def model_selection(self):
         """
