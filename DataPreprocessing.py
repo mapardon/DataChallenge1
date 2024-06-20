@@ -3,6 +3,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from sklearn.impute import SimpleImputer, KNNImputer
 from sklearn.neighbors import LocalOutlierFactor
+from sklearn.preprocessing import MinMaxScaler
 
 
 class DataPreprocessing:
@@ -27,6 +28,12 @@ class DataPreprocessing:
         self.features = ds[ds.columns.to_list()[1:-2]]
         self.h1n1_labels = ds["h1n1_vaccine"]
         self.seas_labels = ds["seasonal_vaccine"]
+
+        short = False
+        if short:
+            self.features = self.features[:500]
+            self.h1n1_labels = self.h1n1_labels[:500]
+            self.seas_labels = self.seas_labels[:500]
 
     def exploratory_analysis(self):
         print(" * Features dimension:\n{}".format(self.features.shape))
@@ -129,16 +136,18 @@ class DataPreprocessing:
             lof = LocalOutlierFactor(n_neighbors=n)
             idx = np.where(lof.fit_predict(num_features) > 0, True, False)  # lof returns -1/1 which we change to use results as indexes
             removed = num_features.shape[0] - np.sum(idx)
-            self.features = self.features[idx]
-            self.h1n1_labels = self.h1n1_labels[idx]
-            self.seas_labels = self.seas_labels[idx]
+            self.features = self.features[idx].reset_index(drop=True)
+            self.h1n1_labels = self.h1n1_labels[idx].reset_index(drop=True)
+            self.seas_labels = self.seas_labels[idx].reset_index(drop=True)
         return removed
 
     def numerize_categorical_features(self):
         pass
 
     def features_scaling(self):
-        pass
+        scaler = MinMaxScaler()
+        num_features = pd.DataFrame(scaler.fit_transform(self.features.select_dtypes([np.number])))
+        self.features = pd.concat([num_features, self.features.select_dtypes(["object"])], axis="columns", ignore_index=True)
 
     def feature_selection(self):
         # For now, we just remove non-numeric columns
