@@ -29,12 +29,6 @@ class DataPreprocessing:
         self.h1n1_labels = ds["h1n1_vaccine"]
         self.seas_labels = ds["seasonal_vaccine"]
 
-        short = False
-        if short:
-            self.features = self.features[:500]
-            self.h1n1_labels = self.h1n1_labels[:500]
-            self.seas_labels = self.seas_labels[:500]
-
     def exploratory_analysis(self):
         print(" * Features dimension:\n{}".format(self.features.shape))
         print("\n * Example record:\n{}".format(self.features.head(1)))

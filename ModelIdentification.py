@@ -52,13 +52,13 @@ class ModelIdentification:
                 for m, auc, pars, _ in self.candidates[k]:
                     ModelIdentification.display_training_result(m, auc, pars)
 
-        best_models, best_perf = ("{}/{}".format(str(self.candidates["h1n1"][0][0]), str(self.candidates["seas"][0][0])),
-                                  statistics.mean([self.candidates["h1n1"][0][1], self.candidates["seas"][0][1]]))
+        best_model_names, best_perf = ("{}/{}".format(str(self.candidates["h1n1"][0][0]), str(self.candidates["seas"][0][0])),
+                                       statistics.mean([self.candidates["h1n1"][0][1], self.candidates["seas"][0][1]]))
         if self.verbose:
             print([statistics.mean([i[1], j[1]]) for i, j in zip(self.candidates["h1n1"], self.candidates["seas"])])
             print("\nAverage of bests: {}".format(best_perf))
 
-        return best_models, best_perf
+        return best_model_names, best_perf
 
     def model_selection(self):
         """
