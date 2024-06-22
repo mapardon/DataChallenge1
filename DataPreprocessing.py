@@ -1,3 +1,5 @@
+import copy
+
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
@@ -11,23 +13,46 @@ class DataPreprocessing:
         self.features = None
         self.h1n1_labels = None
         self.seas_labels = None
+        self.resp_id = None
 
-    def get_datasets(self):
-        return self.features, self.h1n1_labels, self.seas_labels
+    def get_train_datasets(self):
+        train_features = self.features.iloc[:round(len(self.features) * 0.75), :]
+        h1n1_train_labels = self.h1n1_labels[:round(len(self.features) * 0.75)]
+        seas_train_labels = self.seas_labels[:round(len(self.features) * 0.75)]
 
-    def load_data(self):
-        self.features = pd.read_csv("data/training_set_features.csv")
-        flu_labels = pd.read_csv("data/training_set_labels.csv")
+        test_features = self.features.iloc[round(len(self.features) * 0.75):, :]
+        h1n1_test_labels = self.h1n1_labels[round(len(self.features) * 0.75):]
+        seas_test_labels = self.seas_labels[round(len(self.features) * 0.75):]
+
+        return train_features, h1n1_train_labels, seas_train_labels, test_features, h1n1_test_labels, seas_test_labels
+
+    def get_test_dataset(self):
+        return self.resp_id, self.features
+
+    def load_train_set(self, features_src, labels_src):
+        features = pd.read_csv(features_src)
+        flu_labels = pd.read_csv(labels_src)
 
         # shuffle dataset (and reset indexes)
-        ds = self.features
+        ds = features
         ds[["h1n1_vaccine", "seasonal_vaccine"]] = flu_labels[["h1n1_vaccine", "seasonal_vaccine"]]
         ds = ds.sample(frac=1)
         ds.reset_index(inplace=True, drop=True)
 
+        # split train-test sets
+        short = False
+        if short:
+            ds = ds[:750]
+
         self.features = ds[ds.columns.to_list()[1:-2]]
         self.h1n1_labels = ds["h1n1_vaccine"]
         self.seas_labels = ds["seasonal_vaccine"]
+
+    def load_test_set(self, features_src):
+        self.features = pd.read_csv(features_src)
+        self.resp_id = self.features.pop("respondent_id")
+        self.h1n1_labels = None
+        self.seas_labels = None
 
     def exploratory_analysis(self):
         print(" * Features dimension:\n{}".format(self.features.shape))
@@ -124,21 +149,32 @@ class DataPreprocessing:
                 self.features = pd.concat([num_features, obj_features], axis="columns", ignore_index=True)
 
     def outlier_detection(self, n=0):
+        # test set should not be outlier processed
+        train_features, h1n1_train_labels, seas_train_labels, test_features, h1n1_test_labels, seas_test_labels = self.get_train_datasets()
+
         removed = int()
         if n > 1:
-            num_features = self.features.select_dtypes([np.number])
+            num_features = train_features.select_dtypes([np.number])
             lof = LocalOutlierFactor(n_neighbors=n)
             idx = np.where(lof.fit_predict(num_features) > 0, True, False)  # lof returns -1/1 which we change to use results as indexes
             removed = num_features.shape[0] - np.sum(idx)
-            self.features = self.features[idx].reset_index(drop=True)
-            self.h1n1_labels = self.h1n1_labels[idx].reset_index(drop=True)
-            self.seas_labels = self.seas_labels[idx].reset_index(drop=True)
+            train_features = train_features[idx].reset_index(drop=True)
+            h1n1_train_labels = h1n1_train_labels[idx].reset_index(drop=True)
+            seas_train_labels = seas_train_labels[idx].reset_index(drop=True)
+
+        # reconstitute datasets
+        self.features = pd.concat([train_features, test_features], axis="rows").reset_index(drop=True)
+        self.h1n1_labels = pd.concat([h1n1_train_labels, h1n1_test_labels], axis="rows").reset_index(drop=True)
+        self.seas_labels = pd.concat([seas_train_labels, seas_test_labels], axis="rows").reset_index(drop=True)
+
         return removed
 
     def numerize_categorical_features(self):
         pass
 
     def features_scaling(self):
+        tmp = copy.deepcopy(self.features)
+        save = copy.deepcopy(self.features.select_dtypes(["object"]))
         scaler = MinMaxScaler()
         num_features = pd.DataFrame(scaler.fit_transform(self.features.select_dtypes([np.number])))
         self.features = pd.concat([num_features, self.features.select_dtypes(["object"])], axis="columns", ignore_index=True)

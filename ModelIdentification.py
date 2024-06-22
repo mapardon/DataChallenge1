@@ -12,23 +12,39 @@ from utils import sigmoid
 
 
 class ModelIdentification:
-    def __init__(self, features: pd.DataFrame, h1n1_labels: pd.DataFrame, seas_labels: pd.DataFrame, cv_folds: int, verbose=False):
-        self.train_features = features.iloc[:round(len(features) * 0.75), :]
-        self.h1n1_train_labels = h1n1_labels[:round(len(features) * 0.75)]
-        self.seas_train_labels = seas_labels[:round(len(features) * 0.75)]
+    def __init__(self, train_features: pd.DataFrame, h1n1_train_labels: pd.DataFrame, seas_train_labels: pd.DataFrame,
+                 test_features: pd.DataFrame, h1n1_test_labels: pd.DataFrame, seas_test_labels: pd.DataFrame,
+                 cv_folds: int, verbose=False):
+        self.train_features = train_features
+        self.h1n1_train_labels = h1n1_train_labels
+        self.seas_train_labels = seas_train_labels
 
-        self.test_features = features.iloc[round(len(features) * 0.75):, :]
-        self.h1n1_test_labels = h1n1_labels[round(len(features) * 0.75):]
-        self.seas_test_labels = seas_labels[round(len(features) * 0.75):]
+        self.test_features = test_features
+        self.h1n1_test_labels = h1n1_test_labels
+        self.seas_test_labels = seas_test_labels
 
         self.cv_folds = cv_folds
         self.candidates = {"h1n1": list(), "seas": list()}  # stored tuples (model, [perf], [pars], is_reg_model)
         self.verbose = verbose
 
-    def model_exploitation(self):
+    @staticmethod
+    def model_exploitation(h1n1_model, seas_model, test_features: pd.DataFrame, ts_index: pd.Series):
         """
             Use final model to predict challenge data
         """
+
+        h1n1_reg_model = type(h1n1_model) is LinearRegression
+        seas_reg_model = type(seas_model) is LinearRegression
+        h1n1_final_pred_prob = sigmoid(h1n1_model.predict(test_features)) if h1n1_reg_model else h1n1_model.predict_proba(test_features)[:, 1]
+        seas_final_pred_prob = sigmoid(seas_model.predict(test_features)) if seas_reg_model else seas_model.predict_proba(test_features)[:, 1]
+
+        out = pd.DataFrame({
+            "respondent_id": ts_index,
+            "h1n1_vaccine": h1n1_final_pred_prob,
+            "seasonal_vaccine": seas_final_pred_prob
+        })
+
+        out.to_csv("data/submission.csv", index=False)
 
     def model_testing(self):
         """
@@ -52,13 +68,13 @@ class ModelIdentification:
                 for m, auc, pars, _ in self.candidates[k]:
                     ModelIdentification.display_training_result(m, auc, pars)
 
-        best_model_names, best_perf = ("{}/{}".format(str(self.candidates["h1n1"][0][0]), str(self.candidates["seas"][0][0])),
+        best_models_pair, best_perf = ((self.candidates["h1n1"][0][0], self.candidates["seas"][0][0]),
                                        statistics.mean([self.candidates["h1n1"][0][1], self.candidates["seas"][0][1]]))
         if self.verbose:
             print([statistics.mean([i[1], j[1]]) for i, j in zip(self.candidates["h1n1"], self.candidates["seas"])])
             print("\nAverage of bests: {}".format(best_perf))
 
-        return best_model_names, best_perf
+        return best_models_pair, best_perf
 
     def model_selection(self):
         """
