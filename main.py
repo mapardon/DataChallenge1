@@ -34,19 +34,20 @@ def experiment_loop(n_iter, imp_num, imp_obj, nn, scaling):
     return best_models_pairs, n_rem_summary, perf
 
 
-def exploitation_loop(model, imp_num, imp_obj, scaling):
+def exploitation_loop(models, imp_num, imp_obj, scaling):
 
     # challenge data pre-processing
     dp = DataPreprocessing()
     dp.load_test_set("data/test_set_features.csv")
-    dp.missing_values_imputation("median", "most_frequent")
+    dp.missing_values_imputation(imp_num, imp_obj)
     dp.numerize_categorical_features()
     if scaling:
         dp.features_scaling()
     dp.feature_selection()
+    resp_id, features = dp.get_test_dataset()
 
     # use previously trained model on processed challenge data
-    model.predict
+    ModelIdentification.model_exploitation(models[0], models[1], features, resp_id)
 
 
 def machine_learning_procedure():
@@ -63,12 +64,12 @@ def machine_learning_procedure():
     for imp_num in ["knn", "remove", "mean", "median"]:
         for imp_obj in ["remove", "most_frequent"]:
             conf = [imp_num, imp_obj, default_nn, default_scaling]
-            best_models_pairs, n_rem_summary, perf = experiment_loop(N, *conf)
+            best_models_pairs, n_rem_summary, perfs = experiment_loop(N, *conf)
 
             model_names = sorted([(m, [str(bp) for bp in best_models_pairs].count(m)) for m in set([str(bp) for bp in best_models_pairs])],
                                  reverse=True, key=lambda x: x[1])
-            imp_res.append([model_names, conf[:3] + [n_rem_summary] + conf[3:], perf])
-            all_models_conf.append([best_models_pairs, conf, perf, statistics.mean(perf)])
+            imp_res.append([model_names, conf[:3] + [n_rem_summary] + conf[3:], perfs])
+            all_models_conf.append([best_models_pairs, conf, perfs, statistics.mean(perfs)])
 
     imp_res.sort(reverse=True, key=lambda x: statistics.mean(x[2]))
     format_loop_output(imp_res)
@@ -78,12 +79,12 @@ def machine_learning_procedure():
     outliers_res = list()
     for nn in [0, 2, 25]:
         conf = [default_imp_num, default_imp_obj, nn, default_scaling]
-        best_models_pairs, n_rem_summary, perf = experiment_loop(N, *conf)
+        best_models_pairs, n_rem_summary, perfs = experiment_loop(N, *conf)
 
         model_names = sorted([(m, [str(bp) for bp in best_models_pairs].count(m)) for m in set([str(bp) for bp in best_models_pairs])],
                              reverse=True, key=lambda x: x[1])
-        outliers_res.append([model_names, conf[:3] + [n_rem_summary] + conf[3:], perf])
-        all_models_conf.append([best_models_pairs, conf, perf, statistics.mean(perf)])
+        outliers_res.append([model_names, conf[:3] + [n_rem_summary] + conf[3:], perfs])
+        all_models_conf.append([best_models_pairs, conf, perfs, statistics.mean(perfs)])
 
     outliers_res.sort(reverse=True, key=lambda x: statistics.mean(x[2]))
     format_loop_output(outliers_res)
@@ -93,12 +94,12 @@ def machine_learning_procedure():
     scaling_res = list()
     for scaling in [True, False]:
         conf = [default_imp_num, default_imp_obj, default_nn, scaling]
-        best_models_pairs, n_rem_summary, perf = experiment_loop(N, *conf)
+        best_models_pairs, n_rem_summary, perfs = experiment_loop(N, *conf)
 
         model_names = sorted([(m, [str(bp) for bp in best_models_pairs].count(m)) for m in set([str(bp) for bp in best_models_pairs])],
                              reverse=True, key=lambda x: x[1])
-        scaling_res.append([model_names, conf[:3] + [n_rem_summary] + conf[3:], perf])
-        all_models_conf.append([best_models_pairs, conf, perf, statistics.mean(perf)])
+        scaling_res.append([model_names, conf[:3] + [n_rem_summary] + conf[3:], perfs])
+        all_models_conf.append([best_models_pairs, conf, perfs, statistics.mean(perfs)])
 
     scaling_res.sort(reverse=True, key=lambda x: statistics.mean(x[2]))
     format_loop_output(scaling_res)
@@ -106,19 +107,25 @@ def machine_learning_procedure():
     # attempt with all best performing parameters
     print("\n * Combination of best parameters")
     conf = [imp_res[0][1][0], imp_res[0][1][1], outliers_res[0][1][2], scaling_res[0][1][4]]
-    #conf = ["remove", "most_frequent", 25, True]
-    best_models_pairs, n_rem_summary, perf = experiment_loop(N, *conf)
+    best_models_pairs, n_rem_summary, perfs = experiment_loop(N, *conf)
 
     model_names = sorted([(m, [str(bp) for bp in best_models_pairs].count(m)) for m in set([str(bp) for bp in best_models_pairs])],
                          reverse=True, key=lambda x: x[1])
-    conf_res = [model_names, conf[:3] + [n_rem_summary] + conf[3:], perf]
-    all_models_conf.append([best_models_pairs, conf, perf, statistics.mean(perf)])
+    conf_res = [model_names, conf[:3] + [n_rem_summary] + conf[3:], perfs]
+    all_models_conf.append([best_models_pairs, conf, perfs, statistics.mean(perfs)])
     format_loop_output([conf_res])
 
-    # exploit best model on challenge data -> overall best or best of group of highest 5-rounds average?
+    # exploit best model on challenge data -> best among configurations within 0.01 of the highest average
+    # TODO choose h1n1/seas model independently
+    print("\n * Model exploitation")
     all_models_conf.sort(reverse=True, key=lambda x: x[3])
-    # TODO pick best model
-    #exploitation_loop
+    candidates = list()
+    for candidate in [c for c in all_models_conf if all_models_conf[0][3] - [3] < 0.01]:
+        for models, conf, perf in zip(candidate[0], candidate[1], candidate[2]):
+            candidates.append((models, conf, perf))
+
+    candidate = sorted(candidates, reverse=True, key=lambda x: x[2])[0]
+    exploitation_loop(candidate[0], candidates[1][0], candidate[1][1], candidate[1][3])
 
 
 def format_loop_output(conf_perf):

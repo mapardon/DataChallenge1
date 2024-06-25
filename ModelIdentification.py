@@ -68,13 +68,13 @@ class ModelIdentification:
                 for m, auc, pars, _ in self.candidates[k]:
                     ModelIdentification.display_training_result(m, auc, pars)
 
-        best_models_pair, best_perf = ((self.candidates["h1n1"][0][0], self.candidates["seas"][0][0]),
-                                       statistics.mean([self.candidates["h1n1"][0][1], self.candidates["seas"][0][1]]))
+        best_models_pair, best_models_perfs = ((self.candidates["h1n1"][0][0], self.candidates["seas"][0][0]),
+                                               statistics.mean([self.candidates["h1n1"][0][1], self.candidates["seas"][0][1]]))
         if self.verbose:
             print([statistics.mean([i[1], j[1]]) for i, j in zip(self.candidates["h1n1"], self.candidates["seas"])])
-            print("\nAverage of bests: {}".format(best_perf))
+            print("\nAverage of bests: {}".format(best_models_perfs))
 
-        return best_models_pair, best_perf
+        return best_models_pair, best_models_perfs
 
     def model_selection(self):
         """
@@ -84,7 +84,7 @@ class ModelIdentification:
         """
         # Keep max 10 best models
         self.candidates["h1n1"] = sorted(self.candidates["h1n1"], reverse=True, key=lambda x: statistics.mean(x[1]))[:min(10, len(self.candidates["h1n1"]))]
-        self.candidates["seas"] = sorted(self.candidates["seas"], reverse=True, key=lambda x: statistics.mean(x[1]))[:min(10, len(self.candidates["h1n1"]))]
+        self.candidates["seas"] = sorted(self.candidates["seas"], reverse=True, key=lambda x: statistics.mean(x[1]))[:min(10, len(self.candidates["seas"]))]
 
     def model_identification(self, models):
         """

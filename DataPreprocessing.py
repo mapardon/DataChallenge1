@@ -40,7 +40,7 @@ class DataPreprocessing:
         ds.reset_index(inplace=True, drop=True)
 
         # split train-test sets
-        short = False
+        short = True
         if short:
             ds = ds[:750]
 
