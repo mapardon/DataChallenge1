@@ -37,6 +37,7 @@ class ModelIdentification:
         seas_reg_model = type(seas_model) is LinearRegression
         h1n1_final_pred_prob = sigmoid(h1n1_model.predict(test_features)) if h1n1_reg_model else h1n1_model.predict_proba(test_features)[:, 1]
         seas_final_pred_prob = sigmoid(seas_model.predict(test_features)) if seas_reg_model else seas_model.predict_proba(test_features)[:, 1]
+        print(pd.concat([ts_index, test_features], axis="columns").head())
 
         out = pd.DataFrame({
             "respondent_id": ts_index,

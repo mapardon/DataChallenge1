@@ -146,7 +146,7 @@ class DataPreprocessing:
                     imp.fit(obj_features)
                     obj_features = pd.DataFrame(imp.transform(obj_features), columns=obj_features_name)
 
-                self.features = pd.concat([num_features, obj_features], axis="columns", ignore_index=True)
+                self.features = pd.concat([num_features, obj_features], axis="columns")
 
     def outlier_detection(self, n=0):
         # test set should not be outlier processed
@@ -163,9 +163,9 @@ class DataPreprocessing:
             seas_train_labels = seas_train_labels[idx].reset_index(drop=True)
 
         # reconstitute datasets
-        self.features = pd.concat([train_features, test_features], axis="rows").reset_index(drop=True)
-        self.h1n1_labels = pd.concat([h1n1_train_labels, h1n1_test_labels], axis="rows").reset_index(drop=True)
-        self.seas_labels = pd.concat([seas_train_labels, seas_test_labels], axis="rows").reset_index(drop=True)
+        self.features = pd.concat([train_features, test_features], axis="rows", ignore_index=True)
+        self.h1n1_labels = pd.concat([h1n1_train_labels, h1n1_test_labels], axis="rows", ignore_index=True)
+        self.seas_labels = pd.concat([seas_train_labels, seas_test_labels], axis="rows", ignore_index=True)
 
         return removed
 
@@ -173,11 +173,8 @@ class DataPreprocessing:
         pass
 
     def features_scaling(self):
-        tmp = copy.deepcopy(self.features)
-        save = copy.deepcopy(self.features.select_dtypes(["object"]))
         scaler = MinMaxScaler()
-        num_features = pd.DataFrame(scaler.fit_transform(self.features.select_dtypes([np.number])))
-        self.features = pd.concat([num_features, self.features.select_dtypes(["object"])], axis="columns", ignore_index=True)
+        self.features[self.features.select_dtypes([np.number]).columns] = scaler.fit_transform(self.features.select_dtypes([np.number]))
 
     def feature_selection(self):
         # For now, we just remove non-numeric columns
