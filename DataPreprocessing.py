@@ -1,5 +1,3 @@
-import copy
-
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
@@ -15,7 +13,7 @@ class DataPreprocessing:
         self.seas_labels = None
         self.resp_id = None
 
-    def get_train_datasets(self):
+    def get_train_test_datasets(self):
         train_features = self.features.iloc[:round(len(self.features) * 0.75), :]
         h1n1_train_labels = self.h1n1_labels[:round(len(self.features) * 0.75)]
         seas_train_labels = self.seas_labels[:round(len(self.features) * 0.75)]
@@ -26,10 +24,10 @@ class DataPreprocessing:
 
         return train_features, h1n1_train_labels, seas_train_labels, test_features, h1n1_test_labels, seas_test_labels
 
-    def get_test_dataset(self):
+    def get_challenge_dataset(self):
         return self.resp_id, self.features
 
-    def load_train_set(self, features_src, labels_src):
+    def load_train_test_datasets(self, features_src, labels_src):
         features = pd.read_csv(features_src)
         flu_labels = pd.read_csv(labels_src)
 
@@ -48,7 +46,7 @@ class DataPreprocessing:
         self.h1n1_labels = ds["h1n1_vaccine"]
         self.seas_labels = ds["seasonal_vaccine"]
 
-    def load_test_set(self, features_src):
+    def load_challenge_dataset(self, features_src):
         self.features = pd.read_csv(features_src)
         self.resp_id = self.features.pop("respondent_id")
         self.h1n1_labels = None
@@ -150,7 +148,7 @@ class DataPreprocessing:
 
     def outlier_detection(self, n=0):
         # test set should not be outlier processed
-        train_features, h1n1_train_labels, seas_train_labels, test_features, h1n1_test_labels, seas_test_labels = self.get_train_datasets()
+        train_features, h1n1_train_labels, seas_train_labels, test_features, h1n1_test_labels, seas_test_labels = self.get_train_test_datasets()
 
         removed = int()
         if n > 1:
