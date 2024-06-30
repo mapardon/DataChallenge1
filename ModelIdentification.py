@@ -54,10 +54,13 @@ class ModelIdentification:
         for k in ["h1n1", "seas"]:
             for i in range(len(self.candidates[k])):
                 m = self.candidates[k][i][0]
-                m.fit(self.train_features, self.h1n1_train_labels if k == "h1n1" else self.seas_train_labels)
+                try:
+                    m.fit(self.train_features, self.h1n1_train_labels if k == "h1n1" else self.seas_train_labels)
+                except Exception as e:
+                    print()
                 y_i_ts_pred_prob = sigmoid(m.predict(self.test_features)) if self.candidates[k][i][3] else m.predict_proba(self.test_features)[:, 1]
                 auc = roc_auc_score(self.h1n1_test_labels if k == "h1n1" else self.seas_test_labels, y_i_ts_pred_prob)
-                self.candidates[k][i] = (m, auc, *self.candidates[k][i][2:])
+                self.candidates[k][i] = (m, auc)
             self.candidates[k].sort(reverse=True, key=lambda x: x[1])
 
         # print results of testing of most promising models
@@ -74,17 +77,17 @@ class ModelIdentification:
             print([statistics.mean([i[1], j[1]]) for i, j in zip(self.candidates["h1n1"], self.candidates["seas"])])
             print("\nAverage of bests: {}".format(best_models_perf))
 
-        return best_models_pair, best_models_perf
+        return self.candidates
 
-    def model_selection(self):
+    def model_selection(self, n=10):
         """
             Select most promising models based on performance on validation sets.
             For now, we simply take the 10 best performing algorithms, but we could consider creation of heterogeneous
             ensemble model
         """
         # Keep max 10 best models
-        self.candidates["h1n1"] = sorted(self.candidates["h1n1"], reverse=True, key=lambda x: statistics.mean(x[1]))[:min(10, len(self.candidates["h1n1"]))]
-        self.candidates["seas"] = sorted(self.candidates["seas"], reverse=True, key=lambda x: statistics.mean(x[1]))[:min(10, len(self.candidates["seas"]))]
+        self.candidates["h1n1"] = sorted(self.candidates["h1n1"], reverse=True, key=lambda x: statistics.mean(x[1]))[:min(n, len(self.candidates["h1n1"]))]
+        self.candidates["seas"] = sorted(self.candidates["seas"], reverse=True, key=lambda x: statistics.mean(x[1]))[:min(n, len(self.candidates["seas"]))]
 
     def parametric_identification_cv(self, model_h1n1, model_seas, is_reg_model=False):
         """
@@ -134,6 +137,10 @@ class ModelIdentification:
         return h1n1_auc, thr_h1n1, fpr_h1n1, tpr_h1n1, seas_auc, thr_seas, fpr_seas, tpr_seas
 
     # Methods corresponding to the "structural identification" step for the different model types
+    
+    def model_identification(self, models):
+        for m in models:
+            {"lm": self.lm, "ridge": self.ridge, "svg": self.svm, "tree": self.tree}[m]()
 
     def lm(self):
         # Structural and parametric identification

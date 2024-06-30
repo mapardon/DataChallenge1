@@ -21,6 +21,7 @@ class MachineLearningProcedure:
 
     def main(self):
         self.preprocessing()
+        self.model_identification()
 
     def preprocessing(self):
         """
@@ -87,7 +88,7 @@ class MachineLearningProcedure:
             ds = DataPreprocessing().data_preprocessing_pipeline("data/training_set_features.csv",
                                                                  "data/training_set_labels.csv",
                                                                  self.final_imp_num, self.final_imp_obj,
-                                                                 self.final_out_detect, self.final_scaling)[:3]
+                                                                 self.final_out_detect, self.final_scaling)
             self.final_train_sets.append(ds[:3])
             self.final_test_sets.append(ds[3:])
 
@@ -117,9 +118,9 @@ class MachineLearningProcedure:
             mi = ModelIdentification(*dp.get_train_test_datasets(), cv_folds=5)
             mi.lm()
             mi.model_selection()
-            best_models_pair, best_models_perfs = mi.model_testing()
-            best_models_pairs.append(best_models_pair)
-            perfs.append(best_models_perfs)
+            candidates = mi.model_testing()
+            best_models_pairs.append((candidates["h1n1"][0][0], candidates["seas"][0][0]))
+            perfs.append((statistics.mean([candidates["h1n1"][0][1], candidates["seas"][0][1]])))
 
         outlier_detect_res = "{}-{}".format(min(n_removed), max(n_removed))
 
@@ -140,26 +141,23 @@ class MachineLearningProcedure:
             different learning algorithms
         """
 
-        # Plain old linear model
-        lm_res = self.model_identification_exp("lm")
-        self.format_model_exp_output(lm_res)
+        with shelve.open("db") as db:
+            self.final_train_sets = db["final_train_sets"]
+            self.final_test_sets = db["final_test_sets"]
 
-        #
+        # Train models with CV and test performance on unused test set
+        models = ["lm"]
+        candidates = list()
+        for i in range(self.exp_rounds):
+            mi = ModelIdentification(*self.final_train_sets[i], *self.final_test_sets[i], cv_folds=5)
+            mi.model_identification(models)
+            mi.model_selection()
+            candidates.append((mi.model_testing()))
+
+        print(candidates)
 
         self.final_train_sets.clear()
         self.final_test_sets.clear()
-
-    def model_identification_exp(self, model_name):
-        best_models_pairs_perfs = list()
-
-        for i in range(self.exp_rounds):
-            mi = ModelIdentification(*self.final_train_sets[i], *self.final_test_sets[i], cv_folds=5)
-            {"lm": mi.lm, "ridge": mi.ridge, "svg": mi.svm, "tree": mi.tree}[model_name]()
-            mi.model_selection()
-            best_models_pair, best_models_perf = mi.model_testing()
-            best_models_pairs_perfs.append((best_models_pair, best_models_perf))
-
-        return best_models_pairs_perfs
 
     @staticmethod
     def format_model_exp_output(models_perf):
@@ -187,7 +185,6 @@ class MachineLearningProcedure:
         ModelIdentification.model_exploitation(models[0], models[1], features, resp_id)
 
         # Exploit best model on challenge data
-        # TODO choose h1n1/seas model independently
         print("\n * Model exploitation")
 
         candidate = [[1], [2], [3], [4]]
