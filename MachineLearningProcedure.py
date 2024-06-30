@@ -11,8 +11,8 @@ class MachineLearningProcedure:
     """
     def __init__(self):
         self.exp_rounds = 5
-        self.final_num_imp = None
-        self.final_obj_imp = None
+        self.final_imp_num = None
+        self.final_imp_obj = None
         self.final_out_detect = None
         self.final_scaling = None
 
@@ -28,7 +28,6 @@ class MachineLearningProcedure:
             model) in order to preprocess the final dataset
         """
 
-        all_models_conf = list()
         default_imp_num = "remove"
         default_imp_obj = "remove"
         default_nn = int()
@@ -42,10 +41,7 @@ class MachineLearningProcedure:
                 conf = [imp_num, imp_obj, default_nn, default_scaling]
                 best_models_pairs, outlier_detect_res, best_models_perfs = self.preprocessing_exp(self.exp_rounds, *conf)
 
-                model_names = sorted([(m, [str(bp) for bp in best_models_pairs].count(m)) for m in set([str(bp) for bp in best_models_pairs])],
-                                     reverse=True, key=lambda x: x[1])
-                imputation_res.append([model_names, conf[:3] + [outlier_detect_res] + conf[3:], best_models_perfs])
-                all_models_conf.append([best_models_pairs, conf, best_models_perfs, statistics.mean(best_models_perfs)])
+                imputation_res.append([best_models_pairs, conf[:3] + [outlier_detect_res] + conf[3:], best_models_perfs])
 
         imputation_res.sort(reverse=True, key=lambda x: statistics.mean(x[2]))
         self.format_data_exp_output(imputation_res)
@@ -57,10 +53,7 @@ class MachineLearningProcedure:
             conf = [default_imp_num, default_imp_obj, nn, default_scaling]
             best_models_pairs, outlier_detect_res, best_models_perfs = self.preprocessing_exp(self.exp_rounds, *conf)
 
-            model_names = sorted([(m, [str(bp) for bp in best_models_pairs].count(m)) for m in set([str(bp) for bp in best_models_pairs])],
-                                 reverse=True, key=lambda x: x[1])
-            outliers_res.append([model_names, conf[:3] + [outlier_detect_res] + conf[3:], best_models_perfs])
-            all_models_conf.append([best_models_pairs, conf, best_models_perfs, statistics.mean(best_models_perfs)])
+            outliers_res.append([best_models_pairs, conf[:3] + [outlier_detect_res] + conf[3:], best_models_perfs])
 
         outliers_res.sort(reverse=True, key=lambda x: statistics.mean(x[2]))
         self.format_data_exp_output(outliers_res)
@@ -72,42 +65,31 @@ class MachineLearningProcedure:
             conf = [default_imp_num, default_imp_obj, default_nn, scaling]
             best_models_pairs, outlier_detect_res, best_models_perfs = self.preprocessing_exp(self.exp_rounds, *conf)
 
-            model_names = sorted([(m, [str(bp) for bp in best_models_pairs].count(m)) for m in set([str(bp) for bp in best_models_pairs])],
-                                 reverse=True, key=lambda x: x[1])
-            scaling_res.append([model_names, conf[:3] + [outlier_detect_res] + conf[3:], best_models_perfs])
-            all_models_conf.append([best_models_pairs, conf, best_models_perfs, statistics.mean(best_models_perfs)])
+            scaling_res.append([best_models_pairs, conf[:3] + [outlier_detect_res] + conf[3:], best_models_perfs])
 
         scaling_res.sort(reverse=True, key=lambda x: statistics.mean(x[2]))
         self.format_data_exp_output(scaling_res)
 
-        # Attempt with the best parameters value of previous experiments
+        # Attempt with combination of the best parameters value of previous experiments
         print("\n * Combination of best parameters")
         conf = [imputation_res[0][1][0], imputation_res[0][1][1], outliers_res[0][1][2], scaling_res[0][1][4]]
         best_models_pairs, outlier_detect_res, best_models_perfs = self.preprocessing_exp(self.exp_rounds, *conf)
 
-        model_names = sorted([(m, [str(bp) for bp in best_models_pairs].count(m)) for m in set([str(bp) for bp in best_models_pairs])],
-                             reverse=True, key=lambda x: x[1])
-        combination_res = [model_names, conf[:3] + [outlier_detect_res] + conf[3:], best_models_perfs]
-        all_models_conf.append([best_models_pairs, conf, best_models_perfs, statistics.mean(best_models_perfs)])
-        self.format_data_exp_output([combination_res])
+        combination_res = [[best_models_pairs, conf[:3] + [outlier_detect_res] + conf[3:], best_models_perfs]]
+        self.format_data_exp_output(combination_res)
 
-        # Select best performing parameters as configuration having shown highest 5-rounds test performance average
-        # [[((m1, m2), (m1, m2)), (p1, p2, p3), (perf1, perf2), perf_avg], ...]
-        self.final_num_imp, self.final_obj_imp, self.final_out_detect, self.final_scaling = sorted(all_models_conf, reverse=True, key=lambda x: x[3])[0][1]
+        # Select configuration having shown the highest performance average
+        self.final_imp_num, self.final_imp_obj, self.final_out_detect, _, self.final_scaling = sorted(imputation_res + outliers_res + scaling_res + combination_res,
+                                                                                                      reverse=True, key=lambda x: statistics.mean(x[2]))[0][1]
 
         # Prepare datasets with parameters previously defined to avoid recomputing them unnecessarily
         for _ in range(self.exp_rounds):
-            dp = DataPreprocessing()
-            dp.load_train_test_datasets("data/training_set_features.csv", "data/training_set_labels.csv")
-            dp.missing_values_imputation(conf[0], conf[1])
-            dp.outlier_detection(conf[2])
-            dp.numerize_categorical_features()
-            if conf[3]:
-                dp.features_scaling()
-            dp.feature_selection()
-
-            self.final_train_sets.append(dp.get_train_test_datasets()[:3])
-            self.final_test_sets.append(dp.get_train_test_datasets()[3:])
+            ds = DataPreprocessing().data_preprocessing_pipeline("data/training_set_features.csv",
+                                                                 "data/training_set_labels.csv",
+                                                                 self.final_imp_num, self.final_imp_obj,
+                                                                 self.final_out_detect, self.final_scaling)[:3]
+            self.final_train_sets.append(ds[:3])
+            self.final_test_sets.append(ds[3:])
 
         with shelve.open("db") as db:
             db["final_train_sets"] = self.final_train_sets
@@ -122,7 +104,6 @@ class MachineLearningProcedure:
             # Data preprocessing
             dp = DataPreprocessing()
             dp.load_train_test_datasets("data/training_set_features.csv", "data/training_set_labels.csv")
-            # dp.exploratory_analysis()
 
             # Feature engineering
             dp.missing_values_imputation(imp_num, imp_obj)
@@ -146,13 +127,12 @@ class MachineLearningProcedure:
 
     @staticmethod
     def format_data_exp_output(conf_perf):
+        """ conf_perf : [[((m1, m2), (m1, m2)), (p1, p2, p3), (perf1, perf2)], ...] """
         for models, conf, perf in conf_perf:
-            for m in models:
-                print("{}: {}".format(m[0], m[1]))
-            print("imp_num={}, imp_obj={}, knn={}({}), scaling={} -> avg: {}, stdev: {}".format(conf[0], conf[1],
-                                                                                                conf[2], conf[3], conf[4],
-                                                                                                round(statistics.mean(perf), 5),
-                                                                                                round(statistics.stdev(perf), 5)))
+            print("imp_num={}, imp_obj={}, knn={}(#removed:{}), scaling={} -> avg: {}, stdev: {}".format(conf[0], conf[1],
+                                                                                                         conf[2], conf[3], conf[4],
+                                                                                                         round(statistics.mean(perf), 5),
+                                                                                                         round(statistics.stdev(perf), 5)))
 
     def model_identification(self):
         """

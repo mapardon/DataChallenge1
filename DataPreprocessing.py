@@ -12,6 +12,23 @@ class DataPreprocessing:
         self.h1n1_labels = None
         self.seas_labels = None
         self.resp_id = None
+        
+    def data_preprocessing_pipeline(self, features_src, labels_src, imp_num, imp_obj, nn, scaling):
+        """ Shortcut for loading and applying all preprocessing operations """
+        
+        if labels_src is not None:
+            self.load_train_test_datasets(features_src, labels_src)
+        else:
+            self.load_challenge_dataset(features_src)
+
+        self.missing_values_imputation(imp_num, imp_obj)
+        _ = self.outlier_detection(nn)
+        self.numerize_categorical_features()
+        if scaling:
+            self.features_scaling()
+        self.feature_selection()
+
+        return self.get_train_test_datasets() if labels_src is not None else self.get_challenge_dataset()
 
     def get_train_test_datasets(self):
         train_features = self.features.iloc[:round(len(self.features) * 0.75), :]
@@ -97,16 +114,16 @@ class DataPreprocessing:
             ax.set_title(feature.capitalize())
         plt.show()
 
-    def missing_values_imputation(self, num_strat="remove", obj_strat="remove"):
+    def missing_values_imputation(self, imp_num="remove", imp_obj="remove"):
 
-        if num_strat == "remove" and obj_strat == "remove":
+        if imp_num == "remove" and imp_obj == "remove":
             na_idx = self.features.isnull().any(axis="columns")
             self.features = self.features[~na_idx].reset_index(drop=True)
             self.h1n1_labels = self.h1n1_labels[~na_idx].reset_index(drop=True)
             self.seas_labels = self.seas_labels[~na_idx].reset_index(drop=True)
 
         else:
-            if num_strat == "remove":
+            if imp_num == "remove":
                 na_idx = self.features.select_dtypes([np.number]).isnull().any(axis="columns")
                 self.features = self.features[~na_idx].reset_index(drop=True)
                 self.h1n1_labels = self.h1n1_labels[~na_idx].reset_index(drop=True)
@@ -117,18 +134,18 @@ class DataPreprocessing:
                 num_features_name = num_features.columns.to_list()
                 obj_features = self.features.select_dtypes(["object"])
 
-                if num_strat in ["mean", "median", "most_frequent"]:
-                    imp = SimpleImputer(missing_values=np.nan, strategy=num_strat)
+                if imp_num in ["mean", "median", "most_frequent"]:
+                    imp = SimpleImputer(missing_values=np.nan, strategy=imp_num)
                     imp.fit(num_features)
                     num_features = pd.DataFrame(imp.transform(num_features), columns=num_features_name)
 
-                elif num_strat == "knn":
+                elif imp_num == "knn":
                     imp = KNNImputer(n_neighbors=5)
                     num_features = pd.DataFrame(imp.fit_transform(num_features), columns=num_features_name)
 
                 self.features = pd.concat([num_features, obj_features], axis="columns")
 
-            if obj_strat == "remove":
+            if imp_obj == "remove":
                 na_idx = self.features.select_dtypes(["object"]).isnull().any(axis="columns")
                 self.features = self.features[~na_idx].reset_index(drop=True)
                 self.h1n1_labels = self.h1n1_labels[~na_idx].reset_index(drop=True)
@@ -139,7 +156,7 @@ class DataPreprocessing:
                 obj_features = self.features.select_dtypes(["object"])
                 obj_features_name = obj_features.columns.to_list()
 
-                if obj_strat == "most_frequent":
+                if imp_obj == "most_frequent":
                     imp = SimpleImputer(missing_values=np.nan, strategy="most_frequent")
                     imp.fit(obj_features)
                     obj_features = pd.DataFrame(imp.transform(obj_features), columns=obj_features_name)
