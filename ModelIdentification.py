@@ -54,10 +54,7 @@ class ModelIdentification:
         for k in ["h1n1", "seas"]:
             for i in range(len(self.candidates[k])):
                 m = self.candidates[k][i][0]
-                try:
-                    m.fit(self.train_features, self.h1n1_train_labels if k == "h1n1" else self.seas_train_labels)
-                except Exception as e:
-                    print()
+                m.fit(self.train_features, self.h1n1_train_labels if k == "h1n1" else self.seas_train_labels)
                 y_i_ts_pred_prob = sigmoid(m.predict(self.test_features)) if self.candidates[k][i][3] else m.predict_proba(self.test_features)[:, 1]
                 auc = roc_auc_score(self.h1n1_test_labels if k == "h1n1" else self.seas_test_labels, y_i_ts_pred_prob)
                 self.candidates[k][i] = (m, auc)

@@ -1,5 +1,6 @@
-import shelve
 import statistics
+
+import pandas as pd
 
 from DataPreprocessing import DataPreprocessing
 from ModelIdentification import ModelIdentification
@@ -20,7 +21,7 @@ class MachineLearningProcedure:
         self.final_test_sets = list()
 
     def main(self):
-        self.preprocessing()
+        #self.preprocessing()
         self.model_identification()
 
     def preprocessing(self):
@@ -92,9 +93,11 @@ class MachineLearningProcedure:
             self.final_train_sets.append(ds[:3])
             self.final_test_sets.append(ds[3:])
 
-        with shelve.open("db") as db:
-            db["final_train_sets"] = self.final_train_sets
-            db["final_test_sets"] = self.final_test_sets
+        for i in range(self.exp_rounds):
+            for df, name in zip(self.final_train_sets[i], ["labels", "h1n1", "seas"]):
+                df.to_pickle("serialized_df/trs_" + name + str(i))
+            for df, name in zip(self.final_test_sets[i], ["labels", "h1n1", "seas"]):
+                df.to_pickle("serialized_df/tss_" + name + str(i))
 
     @staticmethod
     def preprocessing_exp(n_iter, imp_num, imp_obj, nn, scaling):
@@ -141,20 +144,29 @@ class MachineLearningProcedure:
             different learning algorithms
         """
 
-        with shelve.open("db") as db:
-            self.final_train_sets = db["final_train_sets"]
-            self.final_test_sets = db["final_test_sets"]
+        for i in range(self.exp_rounds):
+            self.final_train_sets.append((pd.read_pickle("serialized_df/trs_labels" + str(i)),
+                                          pd.read_pickle("serialized_df/trs_h1n1" + str(i)),
+                                          pd.read_pickle("serialized_df/trs_seas" + str(i))))
+            self.final_test_sets.append((pd.read_pickle("serialized_df/tss_labels" + str(i)),
+                                         pd.read_pickle("serialized_df/tss_h1n1" + str(i)),
+                                         pd.read_pickle("serialized_df/tss_seas" + str(i))))
 
         # Train models with CV and test performance on unused test set
-        models = ["lm"]
-        candidates = list()
+        models = ["lm", "ridge"]
+        candidates = {"h1n1": list(), "seas": list()}
         for i in range(self.exp_rounds):
             mi = ModelIdentification(*self.final_train_sets[i], *self.final_test_sets[i], cv_folds=5)
             mi.model_identification(models)
             mi.model_selection()
-            candidates.append((mi.model_testing()))
+            res = mi.model_testing()
+            candidates["h1n1"] += res["h1n1"]
+            candidates["seas"] += res["seas"]
 
-        print(candidates)
+        for k in candidates:
+            print(k)
+            for c in sorted(candidates[k], reverse=True, key=lambda x: x[1]):
+                print(c)
 
         self.final_train_sets.clear()
         self.final_test_sets.clear()
