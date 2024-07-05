@@ -20,9 +20,13 @@ class MachineLearningProcedure:
         self.final_train_sets = list()
         self.final_test_sets = list()
 
+        self.final_h1n1_model = None
+        self.final_seas_model = None
+
     def main(self):
-        #self.preprocessing()
+        self.preprocessing()
         self.model_identification()
+        self.exploitation_loop()
 
     def preprocessing(self):
         """
@@ -83,6 +87,8 @@ class MachineLearningProcedure:
         # Select configuration having shown the highest performance average
         self.final_imp_num, self.final_imp_obj, self.final_out_detect, _, self.final_scaling = sorted(imputation_res + outliers_res + scaling_res + combination_res,
                                                                                                       reverse=True, key=lambda x: statistics.mean(x[2]))[0][1]
+        self.final_imp_num = self.final_imp_num if self.final_imp_num != "remove" else "median"
+        self.final_imp_obj = self.final_imp_obj if self.final_imp_obj != "remove" else "most_frequent"
 
         # Prepare datasets with parameters previously defined to avoid recomputing them unnecessarily
         for _ in range(self.exp_rounds):
@@ -168,6 +174,9 @@ class MachineLearningProcedure:
             for c in sorted(candidates[k], reverse=True, key=lambda x: x[1]):
                 print(c)
 
+        self.final_h1n1_model = candidates["h1n1"][0][0]
+        self.final_seas_model = candidates["seas"][0][0]
+
         self.final_train_sets.clear()
         self.final_test_sets.clear()
 
@@ -179,28 +188,19 @@ class MachineLearningProcedure:
             print("Performance (ROC) -> avg: {}, stdev: {}".format(round(statistics.mean(perfs), 5),
                                                                    round(statistics.stdev(perfs), 5)))
 
-    def exploitation_loop(self, models, imp_num, imp_obj, scaling):
+    def exploitation_loop(self):
         """ Finally, we use the models and preprocessing parameters having shown the best performance during training
         to predict challenge data """
 
         # Pre-process challenge data
         dp = DataPreprocessing()
         dp.load_challenge_dataset("data/test_set_features.csv")
-        dp.missing_values_imputation(imp_num, imp_obj)
+        dp.missing_values_imputation(self.final_imp_num, self.final_imp_obj)
         dp.numerize_categorical_features()
-        if scaling:
+        if self.final_scaling:
             dp.features_scaling()
         dp.feature_selection()
         resp_id, features = dp.get_challenge_dataset()
 
         # Use previously trained model on processed challenge data
-        ModelIdentification.model_exploitation(models[0], models[1], features, resp_id)
-
-        # Exploit best model on challenge data
-        print("\n * Model exploitation")
-
-        candidate = [[1], [2], [3], [4]]
-
-        self.exploitation_loop(candidate[0],
-                          "median" if candidate[1][0] == "remove" else candidate[1][0],
-                          "most_frequent" if candidate[1][1] == "remove" else candidate[1][1], candidate[1][3])
+        ModelIdentification.model_exploitation("data/submission.csv", self.final_h1n1_model, self.final_seas_model, features, resp_id)

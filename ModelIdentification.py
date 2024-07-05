@@ -28,7 +28,7 @@ class ModelIdentification:
         self.verbose = verbose
 
     @staticmethod
-    def model_exploitation(h1n1_model, seas_model, test_features: pd.DataFrame, ts_index: pd.Series):
+    def model_exploitation(out_path, h1n1_model, seas_model, test_features: pd.DataFrame, ts_index: pd.Series):
         """
             Use final model to predict challenge data
         """
@@ -44,7 +44,7 @@ class ModelIdentification:
             "seasonal_vaccine": seas_final_pred_prob
         })
 
-        out.to_csv("data/submission.csv", index=False)
+        out.to_csv(out_path, index=False)
 
     def model_testing(self):
         """
