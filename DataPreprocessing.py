@@ -3,7 +3,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from sklearn.impute import SimpleImputer, KNNImputer
 from sklearn.neighbors import LocalOutlierFactor
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 
 
 class DataPreprocessing:
@@ -163,14 +163,14 @@ class DataPreprocessing:
 
                 self.features = pd.concat([num_features, obj_features], axis="columns")
 
-    def outlier_detection(self, n=0):
+    def outlier_detection(self, nn=0):
         # test set should not be outlier processed
         train_features, h1n1_train_labels, seas_train_labels, test_features, h1n1_test_labels, seas_test_labels = self.get_train_test_datasets()
 
         removed = int()
-        if n > 1:
+        if nn > 1:
             num_features = train_features.select_dtypes([np.number])
-            lof = LocalOutlierFactor(n_neighbors=n)
+            lof = LocalOutlierFactor(n_neighbors=nn)
             idx = np.where(lof.fit_predict(num_features) > 0, True, False)  # lof returns -1/1 which we change to use results as indexes
             removed = num_features.shape[0] - np.sum(idx)
             train_features = train_features[idx].reset_index(drop=True)
@@ -184,13 +184,21 @@ class DataPreprocessing:
 
         return removed
 
-    def numerize_categorical_features(self):
-        pass
+    def numerize_categorical_features(self, numerizer="remove"):
+        if numerizer == "remove":
+            self.features = self.features.select_dtypes([np.number])
+
+        elif numerizer == "one-hot":
+            num_features = self.features.select_dtypes(["number"])
+            obj_features = self.features.select_dtypes(["object"])
+            enc = OneHotEncoder(handle_unknown='ignore', sparse_output=False, drop="first")
+            enc.set_output(transform="pandas")
+            obj_features = enc.fit_transform(obj_features)
+            self.features = pd.concat([num_features, obj_features], axis="columns")
 
     def features_scaling(self):
         scaler = MinMaxScaler()
         self.features[self.features.select_dtypes([np.number]).columns] = scaler.fit_transform(self.features.select_dtypes([np.number]))
 
     def feature_selection(self):
-        # For now, we just remove non-numeric columns
-        self.features = self.features.select_dtypes([np.number])
+        pass
