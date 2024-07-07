@@ -13,7 +13,7 @@ class DataPreprocessing:
         self.seas_labels = None
         self.resp_id = None
         
-    def data_preprocessing_pipeline(self, features_src, labels_src, imp_num, imp_obj, nn, scaling):
+    def data_preprocessing_pipeline(self, features_src, labels_src, imp_num, imp_obj, nn, numerizer, scaling):
         """ Shortcut for loading and applying all preprocessing operations """
         
         if labels_src is not None:
@@ -23,7 +23,7 @@ class DataPreprocessing:
 
         self.missing_values_imputation(imp_num, imp_obj)
         _ = self.outlier_detection(nn)
-        self.numerize_categorical_features()
+        self.numerize_categorical_features(numerizer)
         if scaling:
             self.features_scaling()
         self.feature_selection()
@@ -164,11 +164,13 @@ class DataPreprocessing:
                 self.features = pd.concat([num_features, obj_features], axis="columns")
 
     def outlier_detection(self, nn=0):
-        # test set should not be outlier processed
-        train_features, h1n1_train_labels, seas_train_labels, test_features, h1n1_test_labels, seas_test_labels = self.get_train_test_datasets()
 
         removed = int()
         if nn > 1:
+            # test set should not be outlier processed
+            (train_features, h1n1_train_labels, seas_train_labels, test_features, h1n1_test_labels,
+             seas_test_labels) = self.get_train_test_datasets()
+
             num_features = train_features.select_dtypes([np.number])
             lof = LocalOutlierFactor(n_neighbors=nn)
             idx = np.where(lof.fit_predict(num_features) > 0, True, False)  # lof returns -1/1 which we change to use results as indexes
@@ -177,10 +179,10 @@ class DataPreprocessing:
             h1n1_train_labels = h1n1_train_labels[idx].reset_index(drop=True)
             seas_train_labels = seas_train_labels[idx].reset_index(drop=True)
 
-        # reconstitute datasets
-        self.features = pd.concat([train_features, test_features], axis="rows", ignore_index=True)
-        self.h1n1_labels = pd.concat([h1n1_train_labels, h1n1_test_labels], axis="rows", ignore_index=True)
-        self.seas_labels = pd.concat([seas_train_labels, seas_test_labels], axis="rows", ignore_index=True)
+            # reconstitute datasets
+            self.features = pd.concat([train_features, test_features], axis="rows", ignore_index=True)
+            self.h1n1_labels = pd.concat([h1n1_train_labels, h1n1_test_labels], axis="rows", ignore_index=True)
+            self.seas_labels = pd.concat([seas_train_labels, seas_test_labels], axis="rows", ignore_index=True)
 
         return removed
 
@@ -201,4 +203,5 @@ class DataPreprocessing:
         self.features[self.features.select_dtypes([np.number]).columns] = scaler.fit_transform(self.features.select_dtypes([np.number]))
 
     def feature_selection(self):
+        # TODO: remove highly correlated variables (useless and error source)
         pass

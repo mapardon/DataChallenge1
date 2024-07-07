@@ -35,6 +35,7 @@ class ModelIdentification:
 
         h1n1_reg_model = type(h1n1_model) is LinearRegression
         seas_reg_model = type(seas_model) is LinearRegression
+
         h1n1_final_pred_prob = sigmoid(h1n1_model.predict(test_features)) if h1n1_reg_model else h1n1_model.predict_proba(test_features)[:, 1]
         seas_final_pred_prob = sigmoid(seas_model.predict(test_features)) if seas_reg_model else seas_model.predict_proba(test_features)[:, 1]
 
@@ -55,12 +56,7 @@ class ModelIdentification:
             for i in range(len(self.candidates[k])):
                 m = self.candidates[k][i][0]
                 m.fit(self.train_features, self.h1n1_train_labels if k == "h1n1" else self.seas_train_labels)
-                #y_i_ts_pred_prob = sigmoid(m.predict(self.test_features)) if self.candidates[k][i][3] else m.predict_proba(self.test_features)[:, 1]
-                if self.candidates[k][i][3]:
-                    tmp = m.predict(self.test_features)
-                    y_i_ts_pred_prob = sigmoid(tmp)
-                else:
-                    y_i_ts_pred_prob = m.predict_proba(self.test_features)[:, 1]
+                y_i_ts_pred_prob = sigmoid(m.predict(self.test_features)) if self.candidates[k][i][3] else m.predict_proba(self.test_features)[:, 1]
                 auc = roc_auc_score(self.h1n1_test_labels if k == "h1n1" else self.seas_test_labels, y_i_ts_pred_prob)
                 self.candidates[k][i] = (m, auc)
             self.candidates[k].sort(reverse=True, key=lambda x: x[1])
@@ -118,13 +114,7 @@ class ModelIdentification:
 
             # train + predict probabilities
             model_h1n1.fit(X_i_tr, y_i_h1n1_tr)
-            #y_i_h1n1_pred_prob = sigmoid(model_h1n1.predict(X_i_vs)) if is_reg_model else model_h1n1.predict_proba(X_i_vs)[:, 1]
-            if is_reg_model:
-                tmp = model_h1n1.predict(X_i_vs)
-                y_i_h1n1_pred_prob = sigmoid(tmp)
-            else:
-                y_i_h1n1_pred_prob = model_h1n1.predict_proba(X_i_vs)[:, 1]
-
+            y_i_h1n1_pred_prob = sigmoid(model_h1n1.predict(X_i_vs)) if is_reg_model else model_h1n1.predict_proba(X_i_vs)[:, 1]
             model_seas.fit(X_i_tr, y_i_seas_tr)
             y_i_seas_pred_prob = sigmoid(model_seas.predict(X_i_vs)) if is_reg_model else model_seas.predict_proba(X_i_vs)[:, 1]
 

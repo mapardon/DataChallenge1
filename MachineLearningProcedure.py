@@ -110,7 +110,8 @@ class MachineLearningProcedure:
             ds = DataPreprocessing().data_preprocessing_pipeline("data/training_set_features.csv",
                                                                  "data/training_set_labels.csv",
                                                                  self.final_imp_num, self.final_imp_obj,
-                                                                 self.final_out_detect, self.final_scaling)
+                                                                 self.final_out_detect, self.final_numerizer,
+                                                                 self.final_scaling)
             self.final_train_sets.append(ds[:3])
             self.final_test_sets.append(ds[3:])
 
