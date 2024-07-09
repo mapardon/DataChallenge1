@@ -13,7 +13,7 @@ class DataPreprocessing:
         self.seas_labels = None
         self.resp_id = None
         
-    def data_preprocessing_pipeline(self, features_src, labels_src, imp_num, imp_obj, nn, numerizer, scaling):
+    def data_preprocessing_pipeline(self, features_src, labels_src, imp_num, imp_obj, nn, numerizer, scaling, feat_selector):
         """ Shortcut for loading and applying all preprocessing operations """
         
         if labels_src is not None:
@@ -26,7 +26,7 @@ class DataPreprocessing:
         self.numerize_categorical_features(numerizer)
         if scaling:
             self.features_scaling()
-        self.feature_selection()
+        _ = self.feature_selection(feat_selector)
 
         return self.get_train_test_datasets() if labels_src is not None else self.get_challenge_dataset()
 
@@ -202,6 +202,29 @@ class DataPreprocessing:
         scaler = MinMaxScaler()
         self.features[self.features.select_dtypes([np.number]).columns] = scaler.fit_transform(self.features.select_dtypes([np.number]))
 
-    def feature_selection(self):
-        # TODO: remove highly correlated variables (useless and error source)
-        pass
+    def feature_selection(self, feat_selector=None):
+        """ :returns: Number of correlated features removed """
+        # 1: remove highly correlated features (useless and error source)
+        corr_matrix = self.features.corr(numeric_only=True).to_dict()
+        correlated_features = dict()
+        for k1 in corr_matrix:
+            for k2 in list(corr_matrix.keys())[:list(corr_matrix.keys()).index(k1) + 1]:
+                corr_matrix[k1][k2] = round(corr_matrix[k1][k2], 4 if corr_matrix[k1][k2] < 0 else 5)
+
+                if abs(corr_matrix[k1][k2]) > 0.95 and k1 != k2:
+                    if k1 not in correlated_features and k2 not in correlated_features:
+                        correlated_features[k1] = {k2}
+                    elif k1 in correlated_features:
+                        correlated_features[k1].add(k2)
+                    elif k2 in correlated_features:
+                        correlated_features[k2].add(k1)
+
+        self.features.drop(columns=correlated_features.keys(), inplace=True)
+        #print(len(self.features.columns.to_list()))
+
+        # 2: keep only features highly related to the dependent feature
+        n_features_pre = len(self.features.columns.to_list())
+        if feat_selector is None:
+            pass
+
+        return len(correlated_features), n_features_pre - len(self.features.columns.to_list())
