@@ -99,15 +99,15 @@ class MachineLearningProcedure:
         # Features selection
         print("\n * Features selection")
         feat_select_res = list()
-        for feat_select in ["remove", "one-hot"]:
+        for feat_select in [None]:
             conf = [default_imp_num, default_imp_obj, default_nn, default_numerizer, default_scaling, feat_select]
             best_models_pairs, outlier_detect_out, feat_select_out, best_models_perfs = self.preprocessing_exp(self.exp_rounds, *conf)
 
             feat_select_res.append([best_models_pairs, conf[:3] + [outlier_detect_out] + conf[3:] + [feat_select_out],
                                     best_models_perfs])
 
-        numerize_res.sort(reverse=True, key=lambda x: statistics.mean(x[2]))
-        self.format_data_exp_output(numerize_res)
+        feat_select_res.sort(reverse=True, key=lambda x: statistics.mean(x[2]))
+        self.format_data_exp_output(feat_select_res)
 
         # Attempt with combination of the best parameters value of previous experiments
         print("\n * Combination of best parameters")
@@ -175,7 +175,7 @@ class MachineLearningProcedure:
     def format_data_exp_output(conf_perf):
         """ conf_perf : [[((m1, m2), (m1, m2)), (p1, p2, p3), (perf1, perf2)], ...] """
         for models, conf, perf in conf_perf:
-            print("imp_num={}, imp_obj={}, knn={}(#rem.:{}), scaling={}, numerizer={}, feat_select={}(#corr_rem.:{}/#select:{})".format(
+            print("imp_num={}, imp_obj={}, knn={}(#rem.:{}), numerizer={}, scaling={}, feat_select={}(#corr_rem.:{}/#select:{})".format(
                 conf[0], conf[1], conf[2], conf[3], conf[4], conf[5], conf[6], conf[7][0], conf[7][1]))
             print("\t-> avg: {}, stdev: {}".format(round(statistics.mean(perf), 5), round(statistics.stdev(perf), 5)))
 

@@ -55,7 +55,7 @@ class DataPreprocessing:
         ds.reset_index(inplace=True, drop=True)
 
         # split train-test sets
-        short = True
+        short = False
         if short:
             ds = ds[:750]
 
@@ -202,16 +202,17 @@ class DataPreprocessing:
         scaler = MinMaxScaler()
         self.features[self.features.select_dtypes([np.number]).columns] = scaler.fit_transform(self.features.select_dtypes([np.number]))
 
-    def feature_selection(self, feat_selector=None):
-        """ :returns: Number of correlated features removed """
-        # 1: remove highly correlated features (useless and error source)
+    def remove_corr_features(self):
+        """ Remove highly correlated features (useless and error source)
+        :returns: Number of correlated features removed """
+
         corr_matrix = self.features.corr(numeric_only=True).to_dict()
         correlated_features = dict()
         for k1 in corr_matrix:
             for k2 in list(corr_matrix.keys())[:list(corr_matrix.keys()).index(k1) + 1]:
                 corr_matrix[k1][k2] = round(corr_matrix[k1][k2], 4 if corr_matrix[k1][k2] < 0 else 5)
 
-                if abs(corr_matrix[k1][k2]) > 0.95 and k1 != k2:
+                if abs(corr_matrix[k1][k2]) > 0.6 and k1 != k2:
                     if k1 not in correlated_features and k2 not in correlated_features:
                         correlated_features[k1] = {k2}
                     elif k1 in correlated_features:
@@ -220,11 +221,16 @@ class DataPreprocessing:
                         correlated_features[k2].add(k1)
 
         self.features.drop(columns=correlated_features.keys(), inplace=True)
-        #print(len(self.features.columns.to_list()))
+        return len(correlated_features)
 
-        # 2: keep only features highly related to the dependent feature
-        n_features_pre = len(self.features.columns.to_list())
+    def feature_selection(self, feat_selector=None):
+        """ Calls the procedure removing highly correlated features (similar idea as this function) then perform a
+        feature selection procedure
+        :returns: final number of features selected by procedure """
+
+        n_corr_removed = self.remove_corr_features()
+
         if feat_selector is None:
             pass
 
-        return len(correlated_features), n_features_pre - len(self.features.columns.to_list())
+        return n_corr_removed, len(self.features.columns.to_list())
