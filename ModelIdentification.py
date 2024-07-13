@@ -25,24 +25,13 @@ class ModelIdentification:
         self.verbose = verbose
 
     @staticmethod
-    def model_exploitation(out_path, h1n1_model, seas_model, test_features: pd.DataFrame, ts_index: pd.Series):
+    def model_exploitation(model, test_features: pd.DataFrame):
         """
             Use final model to predict challenge data
         """
 
-        h1n1_reg_model = type(h1n1_model) is LinearRegression
-        seas_reg_model = type(seas_model) is LinearRegression
-
-        h1n1_final_pred_prob = sigmoid(h1n1_model.predict(test_features)) if h1n1_reg_model else h1n1_model.predict_proba(test_features)[:, 1]
-        seas_final_pred_prob = sigmoid(seas_model.predict(test_features)) if seas_reg_model else seas_model.predict_proba(test_features)[:, 1]
-
-        out = pd.DataFrame({
-            "respondent_id": ts_index,
-            "h1n1_vaccine": h1n1_final_pred_prob,
-            "seasonal_vaccine": seas_final_pred_prob
-        })
-
-        out.to_csv(out_path, index=False)
+        is_reg_model = type(model) is LinearRegression
+        return sigmoid(model.predict(test_features)) if is_reg_model else model.predict_proba(test_features)[:, 1]
 
     def model_testing(self):
         """

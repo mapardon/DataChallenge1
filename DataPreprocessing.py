@@ -8,12 +8,12 @@ from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 
 class DataPreprocessing:
     def __init__(self):
-        self.features = None
-        self.labels = None
-        self.resp_id = None
+        self.features: pd.DataFrame | None = None
+        self.labels: pd.DataFrame | None = None
+        self.resp_id: pd.DataFrame | None = None
 
     def data_preprocessing_pipeline(self, variant, features_src, labels_src, imp_num, imp_obj, nn, numerizer, scaling, feat_selector):
-        """ Shortcut for loading and applying all preprocessing operations """
+        """ Shortcut for loading and applying all preprocessing operations and returning processed dataset """
         
         if labels_src is not None:
             self.load_train_test_datasets(features_src, labels_src, variant)
@@ -54,7 +54,7 @@ class DataPreprocessing:
         ds.reset_index(inplace=True, drop=True)
 
         # split train-test sets
-        short = False
+        short = True
         if short:
             ds = ds[:750]
 
@@ -215,16 +215,40 @@ class DataPreprocessing:
         return len(correlated_features)
 
     def feature_selection(self, feat_selector=None):
-        """ Calls the procedure removing highly correlated features (similar idea as this function) then perform a
-        feature selection procedure
-        :returns: final number of features selected by procedure """
+        """ Calls the procedure removing highly correlated features (similar idea as this function) then calls the
+        adequate feature_selection procedure depending on the type of the feat_selector parameter
 
-        n_corr_removed = self.remove_corr_features()
+        :returns: number of correlated features removed, final number of features selected by procedure, list of
+         selected features """
 
-        if feat_selector is not None:
-            if feat_selector == "mut_inf":
-                pass
-            elif feat_selector == "rfe":
-                pass
+        print(type(feat_selector), type(feat_selector) is list)
 
-        return n_corr_removed, len(self.features.columns.to_list())
+        n_corr_removed = int()
+        if type(feat_selector) is str:
+            print("ko")
+            self.feature_selection_proc(feat_selector)
+
+        elif type(feat_selector) is list():
+            print("ok")
+            input(">")
+            self.feature_selection_list(feat_selector)
+
+        print("exiting featsel")
+
+        return n_corr_removed, len(self.features.columns.to_list()), self.features.columns.to_list()
+
+    def feature_selection_proc(self, feat_selector):
+        """ Runs a feature selection algorithm """
+
+        print("feature_selection_proc")
+
+        if feat_selector == "mut_inf":
+            pass
+        elif feat_selector == "rfe":
+            pass
+
+    def feature_selection_list(self, selected_features):
+        """ Select features specified in the list parameter """
+
+        print("feature_selection_list")
+        self.features = self.features[selected_features]
