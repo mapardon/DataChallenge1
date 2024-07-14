@@ -55,7 +55,7 @@ class DataPreprocessing:
         ds.reset_index(inplace=True, drop=True)
 
         # split train-test sets
-        short = True
+        short = False
         if short:
             ds = ds[:750]
 
@@ -224,7 +224,7 @@ class DataPreprocessing:
 
         n_corr_removed = int()
         if type(feat_selector) is str:
-            self.remove_corr_features()
+            n_corr_removed = self.remove_corr_features()
             self.feature_selection_proc(feat_selector)
 
         elif type(feat_selector) is list:

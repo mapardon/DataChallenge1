@@ -1,4 +1,3 @@
-import shelve
 import statistics
 
 import pandas as pd
@@ -38,10 +37,10 @@ class MachineLearningProcedure:
         self.final_models = {"h1n1": None, "seas": None}
 
     def main(self):
-        for variant in ["h1n1", "seas"][0:1]:
+        for variant in ["h1n1", "seas"]:
             self.preprocessing(variant)
             self.model_identification(variant)
-        self.exploitation_loop()
+        #self.exploitation_loop()
 
     def preprocessing(self, variant):
         """
@@ -139,6 +138,8 @@ class MachineLearningProcedure:
             imputation_res + outliers_res + numerize_res + scaling_res + feat_select_res + combination_res,
             reverse=True, key=lambda x: statistics.mean(x[2]))[0][1]
         conf["selected_features"] = conf["selected_features"][2]  # retrieve features list
+        print("\n * Final configuration")
+        print(", ".join(["{}: {}".format(k, self.final_confs[variant][k]) for k in self.final_confs[variant]]))
 
         # Prepare datasets with parameters previously defined to avoid recomputing them unnecessarily
         final_train_sets = list()
@@ -223,7 +224,7 @@ class MachineLearningProcedure:
             res = mi.model_testing()
             candidates += res
 
-        print("Final {} candidates".format(variant))
+        print("\nFinal {} candidates".format(variant))
         for c in sorted(candidates, reverse=True, key=lambda x: x[1]):
             print(c)
 
