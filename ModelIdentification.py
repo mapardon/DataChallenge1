@@ -2,13 +2,12 @@ import statistics
 
 import pandas as pd
 import matplotlib.pyplot as plt
+from scipy.special import expit
 from sklearn.ensemble import VotingClassifier, RandomForestClassifier
 from sklearn.linear_model import LinearRegression, RidgeClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
 from sklearn.metrics import roc_auc_score, roc_curve
-
-from utils import sigmoid
 
 
 class ModelIdentification:
@@ -31,7 +30,7 @@ class ModelIdentification:
         """
 
         is_reg_model = type(model) is LinearRegression
-        return sigmoid(model.predict(test_features)) if is_reg_model else model.predict_proba(test_features)[:, 1]
+        return expit(model.predict(test_features)) if is_reg_model else model.predict_proba(test_features)[:, 1]
 
     def model_testing(self):
         """
@@ -41,7 +40,7 @@ class ModelIdentification:
         for i in range(len(self.candidates)):
             m = self.candidates[i][0]
             m.fit(self.train_features, self.train_labels)
-            y_i_ts_pred_prob = sigmoid(m.predict(self.test_features)) if self.candidates[i][3] else m.predict_proba(self.test_features)[:, 1]
+            y_i_ts_pred_prob = expit(m.predict(self.test_features)) if self.candidates[i][3] else m.predict_proba(self.test_features)[:, 1]
             auc = roc_auc_score(self.test_labels, y_i_ts_pred_prob)
             self.candidates[i] = (m, auc)
         self.candidates.sort(reverse=True, key=lambda x: x[1])
@@ -88,7 +87,7 @@ class ModelIdentification:
 
             # train + predict probabilities
             model.fit(X_i_tr, y_i_tr)
-            y_i_pred_prob = sigmoid(model.predict(X_i_vs)) if is_reg_model else model.predict_proba(X_i_vs)[:, 1]
+            y_i_pred_prob = expit(model.predict(X_i_vs)) if is_reg_model else model.predict_proba(X_i_vs)[:, 1]
 
             # compute ROC and AUC
             fpr, tpr, thr = roc_curve(y_i_vs, y_i_pred_prob)

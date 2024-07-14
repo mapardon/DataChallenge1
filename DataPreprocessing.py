@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
+from sklearn.feature_selection import mutual_info_classif, f_classif
 from sklearn.impute import SimpleImputer, KNNImputer
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
@@ -184,7 +185,7 @@ class DataPreprocessing:
         elif numerizer == "one-hot":
             num_features = self.features.select_dtypes(["number"])
             obj_features = self.features.select_dtypes(["object"])
-            enc = OneHotEncoder(handle_unknown='ignore', sparse_output=False, drop="first")
+            enc = OneHotEncoder(handle_unknown='ignore', sparse_output=False, drop=None)
             enc.set_output(transform="pandas")
             obj_features = enc.fit_transform(obj_features)
             self.features = pd.concat([num_features, obj_features], axis="columns")
@@ -221,34 +222,32 @@ class DataPreprocessing:
         :returns: number of correlated features removed, final number of features selected by procedure, list of
          selected features """
 
-        print(type(feat_selector), type(feat_selector) is list)
-
         n_corr_removed = int()
         if type(feat_selector) is str:
-            print("ko")
+            self.remove_corr_features()
             self.feature_selection_proc(feat_selector)
 
-        elif type(feat_selector) is list():
-            print("ok")
-            input(">")
+        elif type(feat_selector) is list:
             self.feature_selection_list(feat_selector)
-
-        print("exiting featsel")
 
         return n_corr_removed, len(self.features.columns.to_list()), self.features.columns.to_list()
 
     def feature_selection_proc(self, feat_selector):
         """ Runs a feature selection algorithm """
 
-        print("feature_selection_proc")
-
         if feat_selector == "mut_inf":
-            pass
-        elif feat_selector == "rfe":
-            pass
+            feat_ranking = sorted([(name, info) for name, info in zip(self.features.columns.to_list(),
+                                                                      mutual_info_classif(self.features, self.labels))],
+                                  reverse=True, key=lambda x: x[1])
+            self.features = self.features[[f[0] for f in feat_ranking if f[1] > 0]]
+
+        elif feat_selector == "f_stat":
+            feat_ranking = sorted([(name, p_val) for name, p_val in zip(self.features.columns.to_list(),
+                                                                        f_classif(self.features, self.labels)[1])],
+                                  key=lambda x: x[1])
+            self.features = self.features[[f[0] for f in feat_ranking if f[1] < 0.05]]
 
     def feature_selection_list(self, selected_features):
         """ Select features specified in the list parameter """
 
-        print("feature_selection_list")
         self.features = self.features[selected_features]

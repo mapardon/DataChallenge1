@@ -38,7 +38,7 @@ class MachineLearningProcedure:
         self.final_models = {"h1n1": None, "seas": None}
 
     def main(self):
-        for variant in ["h1n1", "seas"]:
+        for variant in ["h1n1", "seas"][0:1]:
             self.preprocessing(variant)
             self.model_identification(variant)
         self.exploitation_loop()
@@ -114,8 +114,8 @@ class MachineLearningProcedure:
         # Features selection
         print("\n * Features selection")
         feat_select_res = list()
-        for feat_select in [None]:
-            conf = [default_imp_num, default_imp_obj, default_nn, default_numerizer, default_scaling, feat_select]
+        for feat_select, numerizer in [(None, default_numerizer), ("mut_inf", "remove"), ("mut_inf", "one-hot"), ("f_stat", "remove"), ("f_stat", "one-hot")]:
+            conf = [default_imp_num, default_imp_obj, default_nn, numerizer, default_scaling, feat_select]
             best_models, outlier_detect_out, feat_select_out, best_models_perfs = self.preprocessing_exp(self.exp_rounds, *conf, variant)
 
             feat_select_res.append([best_models, conf[:3] + [outlier_detect_out] + conf[3:] + [feat_select_out],
