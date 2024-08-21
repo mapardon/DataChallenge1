@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from scipy.special import expit
 from sklearn.ensemble import VotingClassifier, RandomForestClassifier
 from sklearn.linear_model import LinearRegression, RidgeClassifier
+from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
 from sklearn.metrics import roc_auc_score, roc_curve
@@ -20,7 +21,7 @@ class ModelIdentification:
         self.test_labels = test_labels
 
         self.cv_folds = cv_folds
-        self.candidates = list()  # stored tuples (model, [perf], [pars], is_reg_model)
+        self.candidates = list()  # stored tuples: (model, [perf], [pars], is_reg_model)
         self.verbose = verbose
 
     @staticmethod
@@ -66,7 +67,7 @@ class ModelIdentification:
 
     def parametric_identification_cv(self, model, is_reg_model=False):
         """
-            Generic loop training the provided model on the training set (split in training and validation
+            Generic loop training the provided model on the training set (split in training/validation
             cross-validation folds) and assessing performance.
         """
 
@@ -106,7 +107,7 @@ class ModelIdentification:
     
     def model_identification(self, models):
         for m in models:
-            {"lm": self.lm, "ridge": self.ridge, "svg": self.svm, "tree": self.tree}[m]()
+            {"lm": self.lm, "ridge": self.ridge, "svm": self.svm, "tree": self.tree, "nn": self.nn}[m]()
 
     def lm(self):
         # Structural and parametric identification
@@ -137,6 +138,27 @@ class ModelIdentification:
             svc = SVC(kernel=kernel, probability=True)
             ret = self.parametric_identification_cv(svc, False)
             self.candidates.append((svc, ret[0], "kernel={}".format(kernel), False))
+
+    def nn(self):
+        best_perf = -1.0
+        best_conf = [None, None, None]
+        for size in [50, 100, 200, 500]:
+            for act_f in ['logistic', 'tanh', 'relu']:
+                for solver in ['lbfgs', 'sgd', 'adam']:
+                    nn = MLPClassifier(hidden_layer_sizes=[size], activation=act_f, solver=solver)
+                    ret = self.parametric_identification_cv(nn, False)
+                    self.candidates.append((nn, ret[0], "hidd_lay_sz={}, act_f={}, solver={}".format(size, act_f, solver), False))
+
+                    tmp_perf = statistics.mean(list(ret[0]))
+                    if tmp_perf > best_perf:
+                        best_perf = tmp_perf
+                        best_conf = [size, act_f, solver]
+
+        # best configuration: try an ensemble model
+        nn_ens = [("nn-{}".format(str(i)), MLPClassifier(hidden_layer_sizes=best_conf[0], activation=best_conf[1], solver=best_conf[2])) for i in range(50)]
+        vc = VotingClassifier(estimators=nn_ens, voting="soft")
+        ret = self.parametric_identification_cv(vc, False)
+        self.candidates.append((vc, ret[0], "hidd_lay_sz={}, act_f={}, solver={}".format(*best_conf), False))
 
     # Display results
 

@@ -38,7 +38,7 @@ class MachineLearningProcedure:
 
     def main(self):
         for variant in ["h1n1", "seas"]:
-            self.preprocessing(variant)
+            #self.preprocessing(variant)
             self.model_identification(variant)
         #self.exploitation_loop()
 
@@ -85,6 +85,7 @@ class MachineLearningProcedure:
         self.format_data_exp_output(outliers_res)
 
         # Numerize categorical features
+        # TODO: keep?
         print("\n * Numerize categorical features")
         numerize_res = list()
         for numerizer in ["remove", "one-hot"]:
@@ -160,8 +161,16 @@ class MachineLearningProcedure:
 
     @staticmethod
     def preprocessing_exp(n_iter, imp_num, imp_obj, nn, numerizer, scaling, feat_selector, variant):
+        """
+        Train a linear model with the provided preprocessing parameters to evaluate their influence on model performance
 
-        best_models, perfs, out_removed, corr_removed = list(), list(), list(), list()
+        :params: parameters for different preprocessing phases
+
+        :return: list of pairs of models, str indicating output of operations for outlier detection/feature
+            selection..., performance of the returned models on the validation phase
+        """
+
+        best_models, best_models_perfs, out_removed, corr_removed = list(), list(), list(), list()
 
         for _ in range(n_iter):
             # Data preprocessing
@@ -170,6 +179,7 @@ class MachineLearningProcedure:
                                         "data/training_set_labels.csv", variant)
 
             # Feature engineering
+            # TODO: use DataPrprocessing.data_preprocessing_pipeline
             dp.missing_values_imputation(imp_num, imp_obj)
             out_removed.append(dp.outlier_detection(nn))
             dp.numerize_categorical_features(numerizer)
@@ -183,18 +193,19 @@ class MachineLearningProcedure:
             mi.model_selection()
             candidates = mi.model_testing()
             best_models.append((candidates[0][0]))
-            perfs.append(candidates[0][1])
+            best_models_perfs.append(candidates[0][1])
 
+        # how many outliers/correlated features/useless features removed
         outlier_detect_res = "{}-{}".format(min(out_removed), max(out_removed))
         corr_removed_res = "{}-{}".format(min(corr_removed, key=lambda x: x[0])[0], max(corr_removed, key=lambda x: x[0])[0])
         feat_select_res = "{}-{}".format(min(corr_removed, key=lambda x: x[1])[1], max(corr_removed, key=lambda x: x[1])[1])
-        selected_features = corr_removed[perfs.index(max(perfs))][2]
+        selected_features = corr_removed[best_models_perfs.index(max(best_models_perfs))][2]
 
-        return best_models, outlier_detect_res, (corr_removed_res, feat_select_res, selected_features), perfs
+        return best_models, outlier_detect_res, (corr_removed_res, feat_select_res, selected_features), best_models_perfs
 
     @staticmethod
     def format_data_exp_output(conf_perf):
-        """ conf_perf : [[(m1, m2), (p1, p2, p3), (perf1, perf2)], [...]] """
+        """ format of conf_perf : [[(m1, m2), (p1, p2, p3), (perf1, perf2)], [...]] """
         for models, conf, perf in conf_perf:
             print("imp_num={}, imp_obj={}, knn={}(#rem.:{}), numerizer={}, scaling={}, feat_select={}(#corr_rem.:{}/#select:{})".format(
                 conf[0], conf[1], conf[2], conf[3], conf[4], conf[5], conf[6], conf[7][0], conf[7][1]))
@@ -206,6 +217,7 @@ class MachineLearningProcedure:
             different learning algorithms
         """
 
+        # use pre-preprocessed datasets to avoid recomputing them every time
         final_train_sets, final_test_sets = list(), list()
         for i in range(self.exp_rounds):
             final_train_sets.append((pd.read_pickle("serialized_df/trs_{}_features_{}".format(variant, str(i))),
@@ -214,8 +226,7 @@ class MachineLearningProcedure:
                                     pd.read_pickle("serialized_df/tss_{}_labels_{}".format(variant, str(i)))))
 
         # Train models with CV and test performance on unused test set
-        models = ["lm", "ridge", "tree"]
-        models = ["lm"]
+        models = ["lm", "ridge", "tree", "svm", "nn"][4:]
         candidates = list()
         for i in range(self.exp_rounds):
             mi = ModelIdentification(*final_train_sets[i], *final_test_sets[i], cv_folds=5)

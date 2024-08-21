@@ -31,6 +31,9 @@ class DataPreprocessing:
         return self.get_train_test_datasets() if labels_src is not None else self.get_challenge_dataset()
 
     def get_train_test_datasets(self):
+        """
+            :returns: split dataset in 75/25% train set and test set
+        """
         train_features = self.features.iloc[:round(len(self.features) * 0.75), :]
         train_labels = self.labels[:round(len(self.features) * 0.75)]
 
@@ -40,6 +43,7 @@ class DataPreprocessing:
         return train_features, train_labels, test_features, test_labels
 
     def get_challenge_dataset(self):
+        """ Manage featureless challenge dataset """
         return self.resp_id, self.features
 
     def load_train_test_datasets(self, features_src, labels_src, variant):
@@ -55,7 +59,7 @@ class DataPreprocessing:
         ds.reset_index(inplace=True, drop=True)
 
         # split train-test sets
-        short = False
+        short = True
         if short:
             ds = ds[:750]
 
@@ -159,16 +163,17 @@ class DataPreprocessing:
                 self.features = pd.concat([num_features, obj_features], axis="columns")
 
     def outlier_detection(self, nn=0):
+        """ :returns: Number of outliers removed """
 
-        removed = int()
+        n_removed = int()
         if nn > 1:
-            # test set should not be outlier processed
+            # NB: test set should not be outlier processed
             train_features, train_labels, test_features, test_labels = self.get_train_test_datasets()
 
             num_features = train_features.select_dtypes([np.number])
             lof = LocalOutlierFactor(n_neighbors=nn)
-            idx = np.where(lof.fit_predict(num_features) > 0, True, False)  # lof returns -1/1 which we change to use results as indexes
-            removed = num_features.shape[0] - np.sum(idx)
+            idx = np.where(lof.fit_predict(num_features) > 0, True, False)  # lof returns -1/1 which we convert to use results as indexes
+            n_removed = num_features.shape[0] - np.sum(idx)
             train_features = train_features[idx].reset_index(drop=True)
             train_labels = train_labels[idx].reset_index(drop=True)
 
@@ -176,7 +181,7 @@ class DataPreprocessing:
             self.features = pd.concat([train_features, test_features], axis="rows", ignore_index=True)
             self.labels = pd.concat([train_labels, test_labels], axis="rows", ignore_index=True)
 
-        return removed
+        return n_removed
 
     def numerize_categorical_features(self, numerizer="remove"):
         if numerizer == "remove":
@@ -223,7 +228,7 @@ class DataPreprocessing:
          selected features """
 
         n_corr_removed = int()
-        if type(feat_selector) is str:
+        if feat_selector in ["mut_inf", "f_stat"]:
             n_corr_removed = self.remove_corr_features()
             self.feature_selection_proc(feat_selector)
 
