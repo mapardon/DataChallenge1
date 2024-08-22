@@ -4,7 +4,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.special import expit
 from sklearn.ensemble import VotingClassifier, RandomForestClassifier
-from sklearn.linear_model import LinearRegression, RidgeClassifier
+from sklearn.linear_model import LinearRegression, RidgeClassifier, LogisticRegression
+from sklearn.naive_bayes import GaussianNB
 from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
@@ -107,7 +108,8 @@ class ModelIdentification:
     
     def model_identification(self, models):
         for m in models:
-            {"lm": self.lm, "ridge": self.ridge, "svm": self.svm, "tree": self.tree, "nn": self.nn}[m]()
+            {"lm": self.lm, "lr": self.lr, "ridge": self.ridge, "gnb": self.gnb, "tree": self.tree,
+             "svm": self.svm, "nn": self.nn}[m]()
 
     def lm(self):
         # Structural and parametric identification
@@ -115,11 +117,21 @@ class ModelIdentification:
         ret = self.parametric_identification_cv(lm, True)
         self.candidates.append((lm, ret[0], str(), True))
 
+    def lr(self):
+        lr = LogisticRegression(max_iter=100000)
+        ret = self.parametric_identification_cv(lr, False)
+        self.candidates.append((lr, ret[0], str(), False))
+
     def ridge(self):
         for alpha in [0.1, 0.5, 1.0, 5.0, 10.0, 20.0]:
             ridge = RidgeClassifier(alpha=alpha)
             ret = self.parametric_identification_cv(ridge, True)
             self.candidates.append((ridge, ret[0], "alpha={}".format(alpha), True))
+
+    def gnb(self):
+        gnb = GaussianNB()
+        ret = self.parametric_identification_cv(gnb, False)
+        self.candidates.append((gnb, ret[0], str(), False))
 
     def tree(self):
         for c in ["entropy", "gini", "log_loss"]:

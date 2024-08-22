@@ -37,7 +37,7 @@ class MachineLearningProcedure:
         self.final_models = {"h1n1": None, "seas": None}
 
     def main(self):
-        for variant in ["h1n1", "seas"]:
+        for variant in ["h1n1", "seas"][:1]:
             #self.preprocessing(variant)
             self.model_identification(variant)
         #self.exploitation_loop()
@@ -226,7 +226,7 @@ class MachineLearningProcedure:
                                     pd.read_pickle("serialized_df/tss_{}_labels_{}".format(variant, str(i)))))
 
         # Train models with CV and test performance on unused test set
-        models = ["lm", "ridge", "tree", "svm", "nn"][4:]
+        models = ["lm", "lr", "ridge", "gnb", "tree", "svm", "nn"][3:4]
         candidates = list()
         for i in range(self.exp_rounds):
             mi = ModelIdentification(*final_train_sets[i], *final_test_sets[i], cv_folds=5)
