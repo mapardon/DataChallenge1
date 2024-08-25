@@ -226,10 +226,10 @@ class MachineLearningProcedure:
                                     pd.read_pickle("serialized_df/tss_{}_labels_{}".format(variant, str(i)))))
 
         # Train models with CV and test performance on unused test set
-        models = ["lm", "lr", "ridge", "gnb", "tree", "svm", "nn"][3:4]
+        models = ["lm", "lr", "ridge", "gnb", "gpc", "tree", "ada", "gbc", "svm", "nn"][6:8]
         candidates = list()
         for i in range(self.exp_rounds):
-            mi = ModelIdentification(*final_train_sets[i], *final_test_sets[i], cv_folds=5)
+            mi = ModelIdentification(*final_train_sets[i], *final_test_sets[i], cv_folds=5, verbose=True)
             mi.model_identification(models)
             mi.model_selection()
             res = mi.model_testing()
