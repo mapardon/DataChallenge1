@@ -13,7 +13,7 @@ class DataPreprocessing:
         self.labels: pd.DataFrame | None = None
         self.resp_id: pd.DataFrame | None = None
 
-    def data_preprocessing_pipeline(self, variant, features_src, labels_src, imp_num, imp_obj, nn, numerizer, scaling, feat_selector):
+    def data_preprocessing_pipeline(self, variant, features_src, labels_src, imp_num, imp_obj, nn, numerizer, scaler, feat_selector):
         """ Shortcut for loading and applying all preprocessing operations and returning processed dataset """
         
         if labels_src is not None:
@@ -24,8 +24,7 @@ class DataPreprocessing:
         self.missing_values_imputation(imp_num, imp_obj)
         _ = self.outlier_detection(nn)
         self.numerize_categorical_features(numerizer)
-        if scaling:
-            self.features_scaling()
+        self.features_scaling(scaler)
         _ = self.feature_selection(feat_selector)
 
         return self.get_train_test_datasets() if labels_src is not None else self.get_challenge_dataset()
@@ -195,9 +194,11 @@ class DataPreprocessing:
             obj_features = enc.fit_transform(obj_features)
             self.features = pd.concat([num_features, obj_features], axis="columns")
 
-    def features_scaling(self):
-        scaler = MinMaxScaler()
-        self.features[self.features.select_dtypes([np.number]).columns] = scaler.fit_transform(self.features.select_dtypes([np.number]))
+    def features_scaling(self, scaler=None):
+        if scaler is not None:
+            if scaler == "minmax":
+                scaler = MinMaxScaler()
+                self.features[self.features.select_dtypes([np.number]).columns] = scaler.fit_transform(self.features.select_dtypes([np.number]))
 
     def remove_corr_features(self):
         """ Remove highly correlated features (useless and error source)
