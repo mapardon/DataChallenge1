@@ -89,7 +89,11 @@ class ModelIdentification:
             y_i_vs = y_i.iloc[n_rows_fold * i: n_rows_fold * (i + 1)].astype(float)
 
             # train + predict probabilities
-            model.fit(X_i_tr, y_i_tr)
+            try:
+                model.fit(X_i_tr, y_i_tr)
+            except Exception as e:
+                print(e)
+                pass
             y_i_pred_prob = expit(model.predict(X_i_vs)) if is_reg_model else model.predict_proba(X_i_vs)[:, 1]
 
             # compute AUC

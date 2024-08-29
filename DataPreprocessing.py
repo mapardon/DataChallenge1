@@ -11,33 +11,62 @@ class DataPreprocessing:
     def __init__(self):
         self.features: pd.DataFrame | None = None
         self.labels: pd.DataFrame | None = None
+        self.test_features: pd.DataFrame | None = None
+        self.test_labels: pd.DataFrame | None = None
         self.resp_id: pd.DataFrame | None = None
 
-    def data_preprocessing_pipeline(self, variant, features_src, labels_src, imp_num, imp_obj, nn, numerizer, scaler, feat_selector):
-        """ Shortcut for loading and applying all preprocessing operations and returning processed dataset """
-        
-        if labels_src is not None:
-            self.load_train_test_datasets(features_src, labels_src, variant)
-        else:
-            self.load_challenge_dataset(features_src)
+        self.out_detect_res = None
+        self.feat_sel_res = None
 
+    def training_preprocessing_pipeline(self, variant, features_src, labels_src, imp_num, imp_obj, nn, numerizer, scaler, feat_selector):
+        """ Shortcut for loading and applying all preprocessing operations and returning processed dataset.
+        Train/test sets are separated to apply only relevant treatments on test set (e.g., no outlier removal) """
+
+        self.load_train_test_datasets(features_src, labels_src, variant)
+        n_test = len(self.test_features)
+
+        self.features = pd.concat([self.features, self.test_features], copy=False, ignore_index=True)
+        self.labels = pd.concat([self.labels, self.test_labels], copy=False, ignore_index=True)
         self.missing_values_imputation(imp_num, imp_obj)
-        _ = self.outlier_detection(nn)
         self.numerize_categorical_features(numerizer)
         self.features_scaling(scaler)
-        _ = self.feature_selection(feat_selector)
+        self.feature_selection(feat_selector)
 
-        return self.get_train_test_datasets() if labels_src is not None else self.get_challenge_dataset()
+        self.test_features = self.features[len(self.features) - n_test:]
+        self.features = self.features[:len(self.features) - n_test]
+        self.test_labels = self.labels[len(self.labels) - n_test:]
+        self.labels = self.labels[:len(self.labels) - n_test]
+
+        self.outlier_detection(nn)
+
+        return self.get_train_test_datasets()
+
+    def challenge_preprocessing_pipeline(self, features_src, imp_num, imp_obj, nn, numerizer, scaler, feat_selector):
+        self.load_challenge_dataset(features_src)
+
+        self.missing_values_imputation(imp_num, imp_obj)
+        self.outlier_detection(nn)
+        self.numerize_categorical_features(numerizer)
+        self.features_scaling(scaler)
+        self.feature_selection(feat_selector)
+
+        return self.get_challenge_dataset()
 
     def get_train_test_datasets(self):
         """
             :returns: split dataset in 75/25% train set and test set
         """
-        train_features = self.features.iloc[:round(len(self.features) * 0.75), :]
-        train_labels = self.labels[:round(len(self.features) * 0.75)]
+        if self.test_features is None:
+            train_features = self.features.iloc[:round(len(self.features) * 0.75), :]
+            train_labels = self.labels[:round(len(self.features) * 0.75)]
+            test_features = self.features.iloc[round(len(self.features) * 0.75):, :]
+            test_labels = self.labels[round(len(self.features) * 0.75):]
 
-        test_features = self.features.iloc[round(len(self.features) * 0.75):, :]
-        test_labels = self.labels[round(len(self.features) * 0.75):]
+        else:
+            train_features = self.features
+            train_labels = self.labels
+            test_features = self.test_features
+            test_labels = self.test_labels
 
         return train_features, train_labels, test_features, test_labels
 
@@ -47,23 +76,31 @@ class DataPreprocessing:
 
     def load_train_test_datasets(self, features_src, labels_src, variant):
         features = pd.read_csv(features_src)
-        flu_labels = pd.read_csv(labels_src)
+        labels = pd.read_csv(labels_src)
         variant = "h1n1_vaccine" if variant == "h1n1" else "seasonal_vaccine"
 
         # shuffle dataset (and reset indexes)
         ds = features
 
-        ds[[variant]] = flu_labels[[variant]]
+        ds[[variant]] = labels[[variant]]
         ds = ds.sample(frac=1)
         ds.reset_index(inplace=True, drop=True)
 
-        # split train-test sets
-        short = False
+        # debug purpose
+        # TODO: remove in final version
+        short = True
         if short:
-            ds = ds[:750]
+            ds = ds[:2000]
 
-        self.features = ds[ds.columns.to_list()[1:-2]]
-        self.labels = ds[variant]
+        # split features/labels and remove respondent_id
+        features = ds[ds.columns.to_list()[1:-2]]
+        labels = ds[variant]
+
+        # split train-test sets
+        self.features = features[:round(len(features) * 0.75)]
+        self.labels = labels[:round(len(labels) * 0.75)]
+        self.test_features = features[round(len(features) * 0.75):]
+        self.test_labels = labels[round(len(labels) * 0.75):]
 
     def load_challenge_dataset(self, features_src):
         self.features = pd.read_csv(features_src)
@@ -166,21 +203,18 @@ class DataPreprocessing:
 
         n_removed = int()
         if nn > 1:
-            # NB: test set should not be outlier processed
-            train_features, train_labels, test_features, test_labels = self.get_train_test_datasets()
 
-            num_features = train_features.select_dtypes([np.number])
+            num_features = self.features.select_dtypes([np.number])
             lof = LocalOutlierFactor(n_neighbors=nn)
             idx = np.where(lof.fit_predict(num_features) > 0, True, False)  # lof returns -1/1 which we convert to use results as indexes
             n_removed = num_features.shape[0] - np.sum(idx)
-            train_features = train_features[idx].reset_index(drop=True)
-            train_labels = train_labels[idx].reset_index(drop=True)
+            self.features = self.features[idx].reset_index(drop=True)
+            self.labels = self.labels[idx].reset_index(drop=True)
 
-            # reconstitute datasets
-            self.features = pd.concat([train_features, test_features], axis="rows", ignore_index=True)
-            self.labels = pd.concat([train_labels, test_labels], axis="rows", ignore_index=True)
+        self.out_detect_res = n_removed
 
-        return n_removed
+    def get_outlier_detection_res(self):
+        return self.out_detect_res
 
     def numerize_categorical_features(self, numerizer="remove"):
         if numerizer == "remove":
@@ -236,7 +270,10 @@ class DataPreprocessing:
         elif type(feat_selector) is list:
             self.feature_selection_list(feat_selector)
 
-        return n_corr_removed, len(self.features.columns.to_list()), self.features.columns.to_list()
+        self.feat_sel_res = n_corr_removed, len(self.features.columns.to_list()), self.features.columns.to_list()
+
+    def get_feature_selection_res(self):
+        return self.feat_sel_res
 
     def feature_selection_proc(self, feat_selector):
         """ Runs a feature selection algorithm """

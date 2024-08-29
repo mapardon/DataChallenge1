@@ -38,9 +38,20 @@ class MachineLearningProcedure:
 
     def main(self):
         for variant in ["h1n1", "seas"][:1]:
-            #self.preprocessing(variant)
+            self.preprocessing(variant)
             self.model_identification(variant)
         #self.exploitation_loop()
+
+        res0, res1, res2 = int(), int(), int()
+        for i in range(5):
+            tmp = pd.read_pickle("serialized_df/trs_{}_features_{}".format("h1n1", str(i)))
+            pmt = pd.read_pickle("serialized_df/tss_{}_features_{}".format("h1n1", str(i)))
+
+            res0 += tmp.shape[0] + pmt.shape[0]
+            res1 += tmp.shape[0]
+            res2 += pmt.shape[0]
+
+        print(res0, res0/5, res1, res2)
 
     def preprocessing(self, variant):
         """
@@ -50,8 +61,8 @@ class MachineLearningProcedure:
 
         print("Preprocessing - {}".format(variant))
 
-        default_imp_num = "remove"
-        default_imp_obj = "remove"
+        default_imp_num = "median"
+        default_imp_obj = "median"
         default_nn = int()
         default_scaler = None
         default_numerizer = "remove"
@@ -60,8 +71,8 @@ class MachineLearningProcedure:
         # Imputation of missing values
         print(" * Imputation of missing values")
         imputation_res = list()
-        for imp_num in ["knn", "remove", "mean", "median"]:
-            for imp_obj in ["remove", "most_frequent"]:
+        for imp_num in ["remove", "knn", "mean", "median"][1:]:
+            for imp_obj in ["remove", "most_frequent"][1:]:
                 conf = [imp_num, imp_obj, default_nn, default_numerizer, default_scaler, default_feat_select]
                 best_models, outlier_detect_out, feat_select_out, best_models_perfs = self.preprocessing_exp(self.exp_rounds, *conf, variant)
 
@@ -142,11 +153,16 @@ class MachineLearningProcedure:
         print("\n * Final configuration")
         print(", ".join(["{}: {}".format(k, self.final_confs[variant][k]) for k in self.final_confs[variant]]))
 
+        store = True
+        if store:
+            self.store_datasets(variant, conf)
+
+    def store_datasets(self, variant, conf):
         # Prepare datasets with parameters previously defined to avoid recomputing them unnecessarily
         final_train_sets = list()
         final_test_sets = list()
         for _ in range(self.exp_rounds):
-            ds = DataPreprocessing().data_preprocessing_pipeline(variant, "data/training_set_features.csv",
+            ds = DataPreprocessing().training_preprocessing_pipeline(variant, "data/training_set_features.csv",
                                                                  "data/training_set_labels.csv",
                                                                  conf["imp_num"], conf["imp_obj"], conf["out_detect"],
                                                                  conf["numerizer"], conf["scaler"], conf["selected_features"])
@@ -173,21 +189,19 @@ class MachineLearningProcedure:
         best_models, best_models_perfs, out_removed, corr_removed = list(), list(), list(), list()
 
         for _ in range(n_iter):
+
             # Data preprocessing
             dp = DataPreprocessing()
-            dp.load_train_test_datasets("data/training_set_features.csv",
-                                        "data/training_set_labels.csv", variant)
+            ds = dp.training_preprocessing_pipeline(variant, "data/training_set_features.csv",
+                                                    "data/training_set_labels.csv",
+                                                    imp_num, imp_obj, nn, numerizer, scaler, feat_selector)
+            out_removed.append(dp.get_outlier_detection_res())
+            corr_removed.append(dp.get_feature_selection_res())
 
-            # Feature engineering
-            # TODO: use DataPreprocessing.data_preprocessing_pipeline
-            dp.missing_values_imputation(imp_num, imp_obj)
-            out_removed.append(dp.outlier_detection(nn))
-            dp.numerize_categorical_features(numerizer)
-            dp.features_scaling(scaler)
-            corr_removed.append(dp.feature_selection(feat_selector))
-
+            print(imp_num, imp_obj, nn, numerizer, scaler, feat_selector)
+            print(ds[0].shape, ds[1].shape, ds[2].shape, ds[3].shape)
             # Model identification and validation
-            mi = ModelIdentification(*dp.get_train_test_datasets(), cv_folds=5)
+            mi = ModelIdentification(*ds, cv_folds=5)
             mi.lm()
             mi.model_selection()
             candidates = mi.model_testing()
@@ -226,6 +240,7 @@ class MachineLearningProcedure:
 
         # Train models with CV and test performance on unused test set
         models = ["lm", "lr", "ridge", "gnb", "gpc", "tree", "ada", "gbc", "svm", "nn"][6:8]
+        models = ["lm"]
         candidates = list()
         for i in range(self.exp_rounds):
             mi = ModelIdentification(*final_train_sets[i], *final_test_sets[i], cv_folds=5, verbose=True)
@@ -267,10 +282,10 @@ class MachineLearningProcedure:
 
             # Pre-process challenge data
             dp = DataPreprocessing()
-            resp_id, features = dp.data_preprocessing_pipeline(variant, "data/test_set_features.csv", None,
-                                                               final_imp_num, final_imp_obj, conf["out_detect"],
-                                                               conf["numerizer"], conf["scaler"],
-                                                               conf["selected_features"])
+            resp_id, features = dp.challenge_preprocessing_pipeline("data/test_set_features.csv",
+                                                                    final_imp_num, final_imp_obj, conf["out_detect"],
+                                                                    conf["numerizer"], conf["scaler"],
+                                                                    conf["selected_features"])
 
             # Use previously trained model on processed challenge data
             out["id"] = resp_id
