@@ -95,20 +95,6 @@ class MachineLearningProcedure:
         outliers_res.sort(reverse=True, key=lambda x: statistics.mean(x[2]))
         self.format_data_exp_output(outliers_res)
 
-        # Numerize categorical features
-        # TODO: keep?
-        print("\n * Numerize categorical features")
-        numerize_res = list()
-        for numerizer in ["remove", "one-hot"]:
-            conf = [default_imp_num, default_imp_obj, default_nn, numerizer, default_scaler, default_feat_select]
-            best_models, outlier_detect_out, feat_select_out, best_models_perfs = self.preprocessing_exp(self.exp_rounds, *conf, variant)
-
-            numerize_res.append([best_models, conf[:3] + [outlier_detect_out] + conf[3:] + [feat_select_out],
-                                 best_models_perfs])
-
-        numerize_res.sort(reverse=True, key=lambda x: statistics.mean(x[2]))
-        self.format_data_exp_output(numerize_res)
-
         # Numeric features scaling
         print("\n * Numeric features scaling")
         scaling_res = list()
@@ -122,22 +108,23 @@ class MachineLearningProcedure:
         scaling_res.sort(reverse=True, key=lambda x: statistics.mean(x[2]))
         self.format_data_exp_output(scaling_res)
 
-        # Features selection
-        print("\n * Features selection")
+        # Numerize categorical features & Features selection
+        print("\n * Numerize categorical features & Features selection")
         feat_select_res = list()
-        for feat_select, numerizer in [(None, default_numerizer), ("mut_inf", "remove"), ("mut_inf", "one-hot"), ("f_stat", "remove"), ("f_stat", "one-hot")]:
-            conf = [default_imp_num, default_imp_obj, default_nn, numerizer, default_scaler, feat_select]
-            best_models, outlier_detect_out, feat_select_out, best_models_perfs = self.preprocessing_exp(self.exp_rounds, *conf, variant)
+        for numerizer in ["remove", "one-hot"]:
+            for feat_select in [None, "mut_inf", "f_stat", "one-hot"]:
+                conf = [default_imp_num, default_imp_obj, default_nn, numerizer, default_scaler, feat_select]
+                best_models, outlier_detect_out, feat_select_out, best_models_perfs = self.preprocessing_exp(self.exp_rounds, *conf, variant)
 
-            feat_select_res.append([best_models, conf[:3] + [outlier_detect_out] + conf[3:] + [feat_select_out],
-                                    best_models_perfs])
+                feat_select_res.append([best_models, conf[:3] + [outlier_detect_out] + conf[3:] + [feat_select_out],
+                                        best_models_perfs])
 
         feat_select_res.sort(reverse=True, key=lambda x: statistics.mean(x[2]))
         self.format_data_exp_output(feat_select_res)
 
         # Attempt with combination of the best parameters value of previous experiments
         print("\n * Combination of best parameters")
-        conf = [imputation_res[0][1][0], imputation_res[0][1][1], outliers_res[0][1][2], numerize_res[0][1][4], scaling_res[0][1][5], feat_select_res[0][1][6]]
+        conf = [imputation_res[0][1][0], imputation_res[0][1][1], outliers_res[0][1][2], feat_select_res[0][1][4], scaling_res[0][1][5], feat_select_res[0][1][6]]
         best_models, outlier_detect_out, feat_select_out, best_models_perfs = self.preprocessing_exp(self.exp_rounds, *conf, variant)
 
         combination_res = [[best_models, conf[:3] + [outlier_detect_out] + conf[3:] + [feat_select_out], best_models_perfs]]
@@ -147,7 +134,7 @@ class MachineLearningProcedure:
         conf = self.final_confs["h1n1"] if variant == "h1n1" else self.final_confs["seas"]
         (conf["imp_num"], conf["imp_obj"], conf["out_detect"], _, conf["numerizer"],
          conf["scaler"], _, conf["selected_features"]) = sorted(
-            imputation_res + outliers_res + numerize_res + scaling_res + feat_select_res + combination_res,
+            imputation_res + outliers_res + scaling_res + feat_select_res + combination_res,
             reverse=True, key=lambda x: statistics.mean(x[2]))[0][1]
         conf["selected_features"] = conf["selected_features"][2]  # retrieve features list
         print("\n * Final configuration")
@@ -163,9 +150,9 @@ class MachineLearningProcedure:
         final_test_sets = list()
         for _ in range(self.exp_rounds):
             ds = DataPreprocessing().training_preprocessing_pipeline(variant, "data/training_set_features.csv",
-                                                                 "data/training_set_labels.csv",
-                                                                 conf["imp_num"], conf["imp_obj"], conf["out_detect"],
-                                                                 conf["numerizer"], conf["scaler"], conf["selected_features"])
+                                                                     "data/training_set_labels.csv",
+                                                                     conf["imp_num"], conf["imp_obj"], conf["out_detect"],
+                                                                     conf["numerizer"], conf["scaler"], conf["selected_features"])
             final_train_sets.append(ds[:2])
             final_test_sets.append(ds[2:])
 
@@ -198,8 +185,6 @@ class MachineLearningProcedure:
             out_removed.append(dp.get_outlier_detection_res())
             corr_removed.append(dp.get_feature_selection_res())
 
-            print(imp_num, imp_obj, nn, numerizer, scaler, feat_selector)
-            print(ds[0].shape, ds[1].shape, ds[2].shape, ds[3].shape)
             # Model identification and validation
             mi = ModelIdentification(*ds, cv_folds=5)
             mi.lm()
