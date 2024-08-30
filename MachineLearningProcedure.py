@@ -37,9 +37,9 @@ class MachineLearningProcedure:
         self.final_models = {"h1n1": None, "seas": None}
 
     def main(self):
-        for variant in ["h1n1", "seas"][:1]:
+        for variant in ["h1n1", "seas"][:]:
             self.preprocessing(variant)
-            self.model_identification(variant)
+            #self.model_identification(variant)
         #self.exploitation_loop()
 
         res0, res1, res2 = int(), int(), int()
@@ -62,7 +62,7 @@ class MachineLearningProcedure:
         print("Preprocessing - {}".format(variant))
 
         default_imp_num = "median"
-        default_imp_obj = "median"
+        default_imp_obj = "most_frequent"
         default_nn = int()
         default_scaler = None
         default_numerizer = "remove"
@@ -81,6 +81,8 @@ class MachineLearningProcedure:
 
         imputation_res.sort(reverse=True, key=lambda x: statistics.mean(x[2]))
         self.format_data_exp_output(imputation_res)
+
+        pass
 
         # Outliers detection
         print("\n * Outliers detection")
@@ -112,7 +114,7 @@ class MachineLearningProcedure:
         print("\n * Numerize categorical features & Features selection")
         feat_select_res = list()
         for numerizer in ["remove", "one-hot"]:
-            for feat_select in [None, "mut_inf", "f_stat", "one-hot"]:
+            for feat_select in [None, "mut_inf", "f_stat"]:
                 conf = [default_imp_num, default_imp_obj, default_nn, numerizer, default_scaler, feat_select]
                 best_models, outlier_detect_out, feat_select_out, best_models_perfs = self.preprocessing_exp(self.exp_rounds, *conf, variant)
 
@@ -125,6 +127,7 @@ class MachineLearningProcedure:
         # Attempt with combination of the best parameters value of previous experiments
         print("\n * Combination of best parameters")
         conf = [imputation_res[0][1][0], imputation_res[0][1][1], outliers_res[0][1][2], feat_select_res[0][1][4], scaling_res[0][1][5], feat_select_res[0][1][6]]
+        print(conf)
         best_models, outlier_detect_out, feat_select_out, best_models_perfs = self.preprocessing_exp(self.exp_rounds, *conf, variant)
 
         combination_res = [[best_models, conf[:3] + [outlier_detect_out] + conf[3:] + [feat_select_out], best_models_perfs]]
@@ -140,7 +143,7 @@ class MachineLearningProcedure:
         print("\n * Final configuration")
         print(", ".join(["{}: {}".format(k, self.final_confs[variant][k]) for k in self.final_confs[variant]]))
 
-        store = True
+        store = False
         if store:
             self.store_datasets(variant, conf)
 

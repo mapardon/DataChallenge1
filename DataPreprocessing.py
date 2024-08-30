@@ -90,7 +90,7 @@ class DataPreprocessing:
         # TODO: remove in final version
         short = True
         if short:
-            ds = ds[:2000]
+            ds = ds[:1000]
 
         # split features/labels and remove respondent_id
         features = ds[ds.columns.to_list()[1:-2]]
