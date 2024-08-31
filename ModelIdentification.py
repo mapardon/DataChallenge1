@@ -13,6 +13,10 @@ from sklearn.svm import SVC
 from sklearn.metrics import roc_auc_score
 
 
+class Candidate:
+    pass
+
+
 class ModelIdentification:
     def __init__(self, train_features: pd.DataFrame, train_labels: pd.DataFrame, test_features: pd.DataFrame,
                  test_labels: pd.DataFrame, cv_folds: int, verbose=False):
@@ -151,16 +155,20 @@ class ModelIdentification:
                 self.candidates.append((rf, auc, "(c={}, n={})".format(c, n), False))
 
     def ada(self):
-        for n in (50, 100, 200):
+        for n in (10, 50, 100, 200, 300, 400, 500):
             ada = AdaBoostClassifier(n_estimators=n, algorithm="SAMME")
             auc = self.parametric_identification_cv(ada, False)
             self.candidates.append((ada, auc, "n={}".format(n), False))
 
     def gbc(self):
-        for n in [50, 100, 200]:
-            gbc = GradientBoostingClassifier(n_estimators=n)
-            auc = self.parametric_identification_cv(gbc, False)
-            self.candidates.append((gbc, auc, "n={}".format(n), False))
+        for n in [100, 200, 300]:
+            for s in [0.6, 0.75, 0.8]:
+                for mss in [2, 3]:
+                    for md in [2, 3, 4]:
+                        gbc = GradientBoostingClassifier(loss="log_loss", n_estimators=n, subsample=s,
+                                                         min_samples_split=mss, max_depth=md)
+                        auc = self.parametric_identification_cv(gbc, False)
+                        self.candidates.append((gbc, auc, "n_estimators={}".format(n), False))
 
     def svm(self):
         for kernel in ['linear', 'poly', 'rbf', 'sigmoid']:

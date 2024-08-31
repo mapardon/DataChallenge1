@@ -8,7 +8,7 @@ from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 
 
 class DataPreprocessing:
-    def __init__(self):
+    def __init__(self, short=False):
         self.features: pd.DataFrame | None = None
         self.labels: pd.DataFrame | None = None
         self.test_features: pd.DataFrame | None = None
@@ -17,6 +17,8 @@ class DataPreprocessing:
 
         self.out_detect_res = None
         self.feat_sel_res = None
+
+        self.short = short
 
     def training_preprocessing_pipeline(self, variant, features_src, labels_src, imp_num, imp_obj, nn, numerizer, scaler, feat_selector):
         """ Shortcut for loading and applying all preprocessing operations and returning processed dataset.
@@ -88,9 +90,8 @@ class DataPreprocessing:
 
         # debug purpose
         # TODO: remove in final version
-        short = True
-        if short:
-            ds = ds[:1000]
+        if self.short:
+            ds = ds[:500]
 
         # split features/labels and remove respondent_id
         features = ds[ds.columns.to_list()[1:-2]]
