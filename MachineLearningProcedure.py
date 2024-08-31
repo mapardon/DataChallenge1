@@ -212,13 +212,22 @@ class MachineLearningProcedure:
             different learning algorithms
         """
 
-        # use pre-preprocessed datasets to avoid recomputing them every time
         final_train_sets, final_test_sets = list(), list()
-        for i in range(self.exp_rounds):
-            final_train_sets.append((pd.read_pickle("serialized_df/trs_{}_features_{}".format(variant, str(i))),
-                                     pd.read_pickle("serialized_df/trs_{}_labels_{}".format(variant, str(i)))))
-            final_test_sets.append((pd.read_pickle("serialized_df/tss_{}_features_{}".format(variant, str(i))),
-                                    pd.read_pickle("serialized_df/tss_{}_labels_{}".format(variant, str(i)))))
+        if self.store and "pre" not in self.steps:
+            # use pre-preprocessed datasets to avoid recomputing them every time
+            for i in range(self.exp_rounds):
+                final_train_sets.append((pd.read_pickle("serialized_df/trs_{}_features_{}".format(variant, str(i))),
+                                         pd.read_pickle("serialized_df/trs_{}_labels_{}".format(variant, str(i)))))
+                final_test_sets.append((pd.read_pickle("serialized_df/tss_{}_features_{}".format(variant, str(i))),
+                                        pd.read_pickle("serialized_df/tss_{}_labels_{}".format(variant, str(i)))))
+
+        else:
+            for i in range(self.exp_rounds):
+                pf = self.final_confs[variant]
+                dp = DataPreprocessing(self.dp_short)
+                ds = dp.training_preprocessing_pipeline(variant, "data/training_set_features.csv", "data/training_set_labels.csv", pf["imp_num"], pf["imp_obj"], pf["out_detect"], pf["scaler"], pf["numerizer"], pf["selected_features"])
+                final_train_sets.append(ds[:2])
+                final_test_sets.append(ds[2:])
 
         # Train models with CV and test performance on unused test set
         candidates = list()

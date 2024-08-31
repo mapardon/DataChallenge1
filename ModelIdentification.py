@@ -1,6 +1,5 @@
 import statistics
 
-import numpy as np
 import pandas as pd
 from scipy.special import expit
 from sklearn.ensemble import VotingClassifier, RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
@@ -55,9 +54,7 @@ class ModelIdentification:
             m, pars = self.candidates[i].model, self.candidates[i].pars
             m.fit(self.train_features, self.train_labels)
             y_i_ts_pred_prob = expit(m.predict(self.test_features)) if self.candidates[i].is_reg_model else m.predict_proba(self.test_features)[:, 1]
-            y_i_ts_pred_prob = m.predict(self.test_features)
-            #auc = roc_auc_score(self.test_labels, y_i_ts_pred_prob)
-            auc = accuracy_score(self.test_labels, y_i_ts_pred_prob)
+            auc = roc_auc_score(self.test_labels, y_i_ts_pred_prob)
             self.candidates[i].model, self.candidates[i].auc, self.candidates[i].pars = m, auc, pars
         self.candidates.sort(reverse=True, key=lambda x: x.auc)
 
@@ -170,14 +167,13 @@ class ModelIdentification:
             self.candidates.append(Candidate(ada, auc, "n={}".format(n), False))
 
     def gbc(self):
-        for n in [100, 200, 300]:
-            for s in [0.6, 0.75, 0.8]:
-                for mss in [2, 3]:
-                    for md in [2, 3, 4]:
-                        gbc = GradientBoostingClassifier(loss="log_loss", n_estimators=n, subsample=s,
-                                                         min_samples_split=mss, max_depth=md)
-                        auc = self.parametric_identification_cv(gbc, False)
-                        self.candidates.append(Candidate(gbc, auc, "n_estimators={}".format(n), False))
+        for s in [0.6, 0.75, 0.8]:
+            for mss in [2, 3]:
+                for md in [3, 4, 5]:
+                    gbc = GradientBoostingClassifier(loss="log_loss", n_estimators=300, subsample=s,
+                                                     min_samples_split=mss, max_depth=md)
+                    auc = self.parametric_identification_cv(gbc, False)
+                    self.candidates.append(Candidate(gbc, auc, "n_estimators".format(300), False))
 
     def svm(self):
         for kernel in ['linear', 'poly', 'rbf', 'sigmoid']:
