@@ -1,7 +1,6 @@
 import statistics
 
 import pandas as pd
-from matplotlib import pyplot as plt
 
 from DataPreprocessing import DataPreprocessing
 from ModelIdentification import ModelIdentification
@@ -170,8 +169,8 @@ class MachineLearningProcedure:
             mi.lm()
             mi.model_selection()
             candidates = mi.model_testing()
-            best_models.append((candidates[0][0]))
-            best_models_perfs.append(candidates[0][1])
+            best_models.append(candidates[0].model)
+            best_models_perfs.append(candidates[0].auc)
 
         # how many outliers/correlated features/useless features removed
         outlier_detect_res = "{}-{}".format(min(out_removed), max(out_removed))
@@ -230,10 +229,10 @@ class MachineLearningProcedure:
             candidates += mi.model_testing()
 
         print("\nFinal {} candidates".format(variant))
-        for c in sorted(candidates, reverse=True, key=lambda x: x[1]):
+        for c in sorted(candidates, reverse=True, key=lambda x: x.auc):
             print(c)
 
-        self.final_models[variant] = candidates[0][0]
+        self.final_models[variant] = candidates[0].model
 
     @staticmethod
     def format_model_exp_output(models_perf):

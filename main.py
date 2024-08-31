@@ -3,4 +3,4 @@ from MachineLearningProcedure import MachineLearningProcedure
 
 if __name__ == '__main__':
 
-    MachineLearningProcedure(1, variant=("h1n1"), steps=("spe"), store=False, mi_models=("gbc"), dp_short=False).main()
+    MachineLearningProcedure(5, variant=("h1n1", "seas"), steps=("mi",), store=False, mi_models=("lr",), dp_short=False).main()

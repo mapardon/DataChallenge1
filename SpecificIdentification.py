@@ -5,7 +5,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from sklearn.ensemble import GradientBoostingClassifier
 
-from ModelIdentification import ModelIdentification
+from ModelIdentification import ModelIdentification, Candidate
 
 
 class ModelIdentificationSpecific(ModelIdentification):
@@ -20,25 +20,25 @@ class ModelIdentificationSpecific(ModelIdentification):
             for n in [50, 100, 200, 300, 400, 500]:
                 gbc = GradientBoostingClassifier(loss="log_loss", n_estimators=n)
                 auc = self.parametric_identification_cv(gbc, False)
-                self.candidates.append((gbc, auc, "n_estimators={}".format(n), False))
+                self.candidates.append(Candidate(gbc, auc, "n_estimators={}".format(n), False))
 
         elif par == "subsample":
             for s in [0.1, 0.5, 0.75, 0.9, 1.0]:
                 gbc = GradientBoostingClassifier(loss="log_loss", subsample=s)
                 auc = self.parametric_identification_cv(gbc, False)
-                self.candidates.append((gbc, auc, "subsample={}".format(s), False))
+                self.candidates.append(Candidate(gbc, auc, "subsample={}".format(s), False))
 
         elif par == "min_sample_split":
             for mss in [2, 3, 5, 10]:
                 gbc = GradientBoostingClassifier(loss="log_loss", min_samples_split=mss)
                 auc = self.parametric_identification_cv(gbc, False)
-                self.candidates.append((gbc, auc, "min_sample_split={}".format(mss), False))
+                self.candidates.append(Candidate(gbc, auc, "min_sample_split={}".format(mss), False))
 
         elif par == "max_depth":
             for max_depth in [2, 3, 4, 5, 10, 20]:
                 gbc = GradientBoostingClassifier(loss="log_loss", max_depth=max_depth)
                 auc = self.parametric_identification_cv(gbc, False)
-                self.candidates.append((gbc, auc, "max_depth={}".format(max_depth), False))
+                self.candidates.append(Candidate(gbc, auc, "max_depth={}".format(max_depth), False))
 
         elif par == "init":
             pass
@@ -76,26 +76,26 @@ class SpecificIdentification:
             candidates += mi.model_testing()
 
         print("\nFinal {} candidates".format(variant))
-        for c in sorted(candidates, reverse=True, key=lambda x: x[1]):
+        for c in sorted(candidates, reverse=True, key=lambda x: x.auc):
             print(c)
 
         # plotting bc its cool
         candidates_num = list()
         for c in candidates:
-            c = c[:2] + tuple([float(c[2].split('=')[1])]) + c[3:]
+            c.pars = float(c.pars.split('=')[1])
             candidates_num.append(c)
-        candidates_num.sort(key=lambda x: x[2])
+        candidates_num.sort(key=lambda x: x.pars)
 
         print(candidates_num)
         x, y = list(), list()
         for i in range(0, len(candidates_num), self.exp_rounds):
-            x.append(candidates_num[i][2])
-            y.append(statistics.mean([candidates_num[j][1] for j in range(i, min(len(candidates_num), i+self.exp_rounds))]))
+            x.append(candidates_num[i].pars)
+            y.append(statistics.mean([candidates_num[j].auc for j in range(i, min(len(candidates_num), i+self.exp_rounds))]))
         print(x, y)
         fig, ax = plt.subplots()
         ax.plot(x, y)
 
-        ax.set(xlabel=candidates[0][2].split('=')[0], ylabel='AUC', title='Bigger is better ({}, {})?'.format(model, variant))
+        ax.set(xlabel=candidates[0].pars, ylabel='AUC', title='Bigger is better ({}, {})?'.format(model, variant))
         ax.grid()
         plt.show()
         #plt.savefig("{}-{}-{}.png".format(variant, model, par))
@@ -113,7 +113,7 @@ def multi_proc():
 
 
 def uni_proc():
-    SpecificIdentification(5, ("h1n1",), (("gbc", "min_sample_split"),)).main()
+    SpecificIdentification(1, ("h1n1",), (("ada", None),)).main()
 
 
 if __name__ == '__main__':
