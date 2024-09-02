@@ -112,7 +112,7 @@ class ModelIdentification:
     def model_identification(self, models):
         for m in models:
             {"lm": self.lm, "lr": self.lr, "ridge": self.ridge, "gnb": self.gnb, "gpc": self.gpc, "tree": self.tree,
-             "ada": self.ada, "gbc": self.gbc, "svm": self.svm, "nn": self.nn}[m]()
+             "forest": self.forest, "ada": self.ada, "gbc": self.gbc, "svm": self.svm, "nn": self.nn}[m]()
 
         # print results of model identification operations
         if self.verbose:
@@ -150,10 +150,12 @@ class ModelIdentification:
 
     def tree(self):
         for c in ["entropy", "gini", "log_loss"]:
-            dtree = DecisionTreeClassifier(criterion=c)
-            auc = self.parametric_identification_cv(dtree, False)
-            self.candidates.append(Candidate(dtree, auc, "c={}".format(c), False))
+            for s in ["best", "random"]:
+                dtree = DecisionTreeClassifier(criterion=c, splitter=s)
+                auc = self.parametric_identification_cv(dtree, False)
+                self.candidates.append(Candidate(dtree, auc, "c={}, s={}".format(c, s), False))
 
+    def forest(self):
         for c in ["entropy", "gini", "log_loss"]:
             for n in [10, 20, 50, 100]:
                 rf = RandomForestClassifier(criterion=c, n_estimators=n)
