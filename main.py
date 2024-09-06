@@ -7,5 +7,5 @@ if __name__ == '__main__':
                              variant=("h1n1", "seas"),
                              steps=("mi",),  # pre, mi, exp
                              store=True,
-                             mi_models=("tree",),
+                             mi_models=("lm", "lr", "tree", "ada", "gbc", "bc"),
                              dp_short=False).main()

@@ -3,7 +3,8 @@ from multiprocessing import Process
 
 import pandas as pd
 from matplotlib import pyplot as plt
-from sklearn.ensemble import GradientBoostingClassifier, HistGradientBoostingClassifier, BaggingClassifier
+from sklearn.ensemble import GradientBoostingClassifier, HistGradientBoostingClassifier, BaggingClassifier, \
+    AdaBoostClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 
@@ -70,30 +71,58 @@ class ModelIdentificationSpecific(ModelIdentification):
                 auc = self.parametric_identification_cv(hgb, False)
                 self.candidates.append(Candidate(hgb, auc, ["max_features={}".format(mf)], False))
 
-    def bc(self, par):
-        # TODO: manage multi-prametricity
-        for e, n in zip([None, DecisionTreeClassifier(criterion="log_loss", splitter="best"),
-                         DecisionTreeClassifier(criterion="log_loss", splitter="random"),
-                         LogisticRegression(max_iter=100000),
-                         GradientBoostingClassifier(loss="log_loss", n_estimators=300, subsample=0.75,
-                                                     min_samples_split=2, max_depth=4)], ['None', 'DTC-best',
-                                                                                          'DTC-random', 'LR', 'GBC']):
+    def ada(self, par):
+        if "_uni" in par:
+            estimators, names = [None, DecisionTreeClassifier(criterion="log_loss", splitter="best"),
+                                 DecisionTreeClassifier(criterion="log_loss", splitter="random"),
+                                 LogisticRegression(max_iter=100000)], ['None', 'DTC-best', 'DTC-random', 'LR']
+        else:  # "_ens" in par
+            estimators, names = [GradientBoostingClassifier(loss="log_loss", n_estimators=200, subsample=0.75,
+                                 min_samples_split=2, max_depth=4)], ['GBC']
 
-            if par == "max_features":
+        for e, n in zip(estimators, names):
+            if par == "n_estimators_uni":
+                for ne in [100, 200, 300, 400, 500]:
+                    ada = AdaBoostClassifier(n_estimators=ne, algorithm="SAMME")
+                    auc = self.parametric_identification_cv(ada, False)
+                    self.candidates.append(Candidate(ada, auc, ["n_estimators={}".format(ne), n], False))
+
+            elif par == "n_estimators_ens":
+                for ne in [10, 15, 20, 25]:
+                    ada = AdaBoostClassifier(n_estimators=ne, algorithm="SAMME")
+                    auc = self.parametric_identification_cv(ada, False)
+                    self.candidates.append(Candidate(ada, auc, ["n_estimators={}".format(ne), n], False))
+
+    def bc(self, par):
+        if "_uni" in par:
+            estimators, names = [None, DecisionTreeClassifier(criterion="log_loss", splitter="best"),
+                                 DecisionTreeClassifier(criterion="log_loss", splitter="random"),
+                                 LogisticRegression(max_iter=100000)], ['None', 'DTC-best', 'DTC-random', 'LR']
+        else:  # "_ens" in par
+            estimators, names = [GradientBoostingClassifier(loss="log_loss", n_estimators=200, subsample=0.75,
+                                 min_samples_split=2, max_depth=4)], ['GBC']
+
+        for e, n in zip(estimators, names):
+            if "max_features" in par:
                 for mf in [0.5, 0.75, 1.0]:
                     bc = BaggingClassifier(estimator=e, max_features=mf)
                     auc = self.parametric_identification_cv(bc, False)
                     self.candidates.append(Candidate(bc, auc, ["max_features={}".format(mf), n], False))
 
-            elif par == "oob_score":
+            elif "oob_score" in par:
                 for oob in [False, True]:
                     bc = BaggingClassifier(estimator=e, oob_score=oob)
                     auc = self.parametric_identification_cv(bc, False)
                     self.candidates.append(Candidate(bc, auc, ["oob_score={}".format(oob), n], False))
 
-            elif par == "n_estimators":
-                ns = [10, 15, 20] if type(e) is GradientBoostingClassifier() else [10, 20, 50, 100, 200]
-                for ne in ns:
+            elif par == "n_estimators_uni":
+                for ne in [10, 20, 50, 100, 200]:
+                    bc = BaggingClassifier(estimator=e, n_estimators=ne)
+                    auc = self.parametric_identification_cv(bc, False)
+                    self.candidates.append(Candidate(bc, auc, ["n_estimators={}".format(ne), n], False))
+
+            elif par == "n_estimators_ens":
+                for ne in [10, 15, 20]:
                     bc = BaggingClassifier(estimator=e, n_estimators=ne)
                     auc = self.parametric_identification_cv(bc, False)
                     self.candidates.append(Candidate(bc, auc, ["n_estimators={}".format(ne), n], False))
@@ -117,10 +146,10 @@ class SpecificIdentification:
     def specific_identification(self, variant, model, par):
         final_train_sets, final_test_sets = list(), list()
         for i in range(self.exp_rounds):
-            final_train_sets.append((pd.read_pickle("serialized_df/trs_{}_features_{}".format(variant, str(i)))[:300],
-                                     pd.read_pickle("serialized_df/trs_{}_labels_{}".format(variant, str(i)))[:300]))
-            final_test_sets.append((pd.read_pickle("serialized_df/tss_{}_features_{}".format(variant, str(i)))[:300],
-                                    pd.read_pickle("serialized_df/tss_{}_labels_{}".format(variant, str(i)))[:300]))
+            final_train_sets.append((pd.read_pickle("serialized_df/trs_{}_features_{}".format(variant, str(i))),
+                                     pd.read_pickle("serialized_df/trs_{}_labels_{}".format(variant, str(i)))))
+            final_test_sets.append((pd.read_pickle("serialized_df/tss_{}_features_{}".format(variant, str(i))),
+                                    pd.read_pickle("serialized_df/tss_{}_labels_{}".format(variant, str(i)))))
 
         # get experiment results
         candidates = list()
@@ -141,8 +170,8 @@ class SpecificIdentification:
         if len(candidates[0].pars) == 1:
             candidates = [candidates]
         elif len(candidates[0].pars) == 2:
-            candidates2 = [[]]
-            for i in range(1, len(candidates) - 1):
+            candidates2 = [[candidates[0]]]
+            for i in range(1, len(candidates)):
                 if candidates[i].pars[1] != candidates[i-1].pars[1]:
                     candidates2.append(list())
                 candidates2[-1].append(candidates[i])
@@ -164,19 +193,17 @@ class SpecificIdentification:
             fig, ax = plt.subplots()
             ax.plot(x, y)
 
-            try:
-                ax.set(xlabel=par, ylabel='AUC', title='Bigger is better ({}, {}, {})?'.format(model, variant,
-                                                                                               category[0].pars[-1]))
-            except Exception as e:
-                print('>>>', e, category)
+            ax.set(xlabel=par, ylabel='AUC', title='Bigger is better ({}, {}, {})?'.format(model, variant, category[0].pars[-1]))
             ax.grid()
-            #plt.show()
-            plt.savefig("figures/{}-{}-{}-{}.png".format(variant, model, par, category[0].pars[-1]))
+            plt.show()
+            #plt.savefig("figures/{}-{}-{}-{}.png".format(variant, model, par, category[0].pars[-1]))
 
 
 def multi_proc():
-    #confs = [("gbc", "n_estimators",), ("gbc", "subsample",), ("gbc", "min_sample_split",), ("gbc", "max_depth",)]
-    confs = [("bc", "max_features",), ("bc", "n_estimators",)]
+    confs = [("bc", "max_features_uni",), ("bc", "max_features_ens",), ("bc", "n_estimators_uni",), ("bc", "n_estimators_ens",)]
+    confs = [("bc", "max_features_ens",), ("bc", "n_estimators_ens",)]
+    confs = [("bc", "max_features_uni",)]
+    confs = [("ada", "n_estimators_uni",), ("ada", "n_estimators_ens",)]
     procs = [Process(target=SpecificIdentification(5, ("h1n1",), (c,)).main) for c in confs]
 
     for p in procs:

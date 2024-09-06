@@ -2,7 +2,8 @@ import statistics
 
 import pandas as pd
 from scipy.special import expit
-from sklearn.ensemble import VotingClassifier, RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
+from sklearn.ensemble import VotingClassifier, RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier, \
+    BaggingClassifier
 from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.linear_model import LinearRegression, RidgeClassifier, LogisticRegression
 from sklearn.naive_bayes import GaussianNB
@@ -112,7 +113,7 @@ class ModelIdentification:
     def model_identification(self, models):
         for m in models:
             {"lm": self.lm, "lr": self.lr, "ridge": self.ridge, "gnb": self.gnb, "gpc": self.gpc, "tree": self.tree,
-             "forest": self.forest, "ada": self.ada, "gbc": self.gbc, "svm": self.svm, "nn": self.nn}[m]()
+             "forest": self.forest, "ada": self.ada, "gbc": self.gbc, "bc": self.bc, "svm": self.svm, "nn": self.nn}[m]()
 
         # print results of model identification operations
         if self.verbose:
@@ -169,13 +170,17 @@ class ModelIdentification:
             self.candidates.append(Candidate(ada, auc, "n={}".format(n), False))
 
     def gbc(self):
-        for s in [0.6, 0.75, 0.8]:
-            for mss in [2, 3]:
-                for md in [3, 4, 5]:
-                    gbc = GradientBoostingClassifier(loss="log_loss", n_estimators=300, subsample=s,
-                                                     min_samples_split=mss, max_depth=md)
-                    auc = self.parametric_identification_cv(gbc, False)
-                    self.candidates.append(Candidate(gbc, auc, "n_estimators".format(300), False))
+        for s in [0.75, 1.0]:
+            gbc = GradientBoostingClassifier(loss="log_loss", n_estimators=250, subsample=s,
+                                             min_samples_split=2, max_depth=3)
+            auc = self.parametric_identification_cv(gbc, False)
+            self.candidates.append(Candidate(gbc, auc, "subsample:{}".format(s), False))
+
+    def bc(self):
+        estimator = GradientBoostingClassifier(loss="log_loss", n_estimators=200, subsample=0.75, min_samples_split=2, max_depth=3)
+        bc = BaggingClassifier(estimator=estimator, n_estimators=10)
+        auc = self.parametric_identification_cv(bc, False)
+        self.candidates.append(Candidate(bc, auc, "estimators={}".format("GBC"), False))
 
     def svm(self):
         for kernel in ['linear', 'poly', 'rbf', 'sigmoid']:
