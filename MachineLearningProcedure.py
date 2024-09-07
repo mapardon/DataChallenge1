@@ -1,9 +1,13 @@
+import pickle
 import statistics
 
 import pandas as pd
 
 from DataPreprocessing import DataPreprocessing
 from ModelIdentification import ModelIdentification
+
+PREPROC_STORE = "preproc_config_store"
+MODELS_STORE = "models_trained_store"
 
 
 class MachineLearningProcedure:
@@ -139,6 +143,8 @@ class MachineLearningProcedure:
         print("\n * Final configuration")
         print(", ".join(["{}: {}".format(k, self.final_confs[variant][k]) for k in self.final_confs[variant]]))
 
+        pickle.dump(self.final_confs, open(PREPROC_STORE, "wb"))
+
         if self.store:
             self.store_datasets(variant, conf)
 
@@ -213,13 +219,20 @@ class MachineLearningProcedure:
         """
 
         final_train_sets, final_test_sets = list(), list()
-        if self.store and "pre" not in self.steps:
+        if "pre" not in self.steps:
             # use pre-preprocessed datasets to avoid recomputing them every time
+            f1, f2, f3, f4 = ("serialized_df/trs_{}_features_{}", "serialized_df/trs_{}_labels_{}",
+                              "serialized_df/tss_{}_features_{}", "serialized_df/tss_{}_labels_{}")
+
+            if self.dp_short:
+                for f in (f1, f2, f3, f4):
+                    f += "_short"
+
             for i in range(self.exp_rounds):
-                final_train_sets.append((pd.read_pickle("serialized_df/trs_{}_features_{}".format(variant, str(i))),
-                                         pd.read_pickle("serialized_df/trs_{}_labels_{}".format(variant, str(i)))))
-                final_test_sets.append((pd.read_pickle("serialized_df/tss_{}_features_{}".format(variant, str(i))),
-                                        pd.read_pickle("serialized_df/tss_{}_labels_{}".format(variant, str(i)))))
+                final_train_sets.append((pd.read_pickle(f1.format(variant, str(i))),
+                                         pd.read_pickle(f2.format(variant, str(i)))))
+                final_test_sets.append((pd.read_pickle(f3.format(variant, str(i))),
+                                        pd.read_pickle(f4.format(variant, str(i)))))
 
         else:
             for i in range(self.exp_rounds):
@@ -242,6 +255,8 @@ class MachineLearningProcedure:
             print(c)
 
         self.final_models[variant] = candidates[0].model
+
+        pickle.dump(self.final_models, open(MODELS_STORE, "wb"))
 
     @staticmethod
     def format_model_exp_output(models_perf):

@@ -43,9 +43,6 @@ class ModelIdentificationSpecific(ModelIdentification):
                 auc = self.parametric_identification_cv(gbc, False)
                 self.candidates.append(Candidate(gbc, auc, ["max_depth={}".format(max_depth)], False))
 
-        elif par == "init":
-            pass
-
     def hgb(self, par="max_iter"):
         if par == "max_iter":
             for mxi in [50, 100, 500, 1000, 5000, 10**4, 10**5, 10**6]:
@@ -75,21 +72,21 @@ class ModelIdentificationSpecific(ModelIdentification):
         if "_uni" in par:
             estimators, names = [None, DecisionTreeClassifier(criterion="log_loss", splitter="best"),
                                  DecisionTreeClassifier(criterion="log_loss", splitter="random"),
-                                 LogisticRegression(max_iter=100000)], ['None', 'DTC-best', 'DTC-random', 'LR']
+                                 LogisticRegression(max_iter=100000)][:1], ['None', 'DTC-best', 'DTC-random', 'LR']
         else:  # "_ens" in par
             estimators, names = [GradientBoostingClassifier(loss="log_loss", n_estimators=200, subsample=0.75,
-                                 min_samples_split=2, max_depth=4)], ['GBC']
+                                 min_samples_split=2, max_depth=3)], ['GBC']
 
         for e, n in zip(estimators, names):
             if par == "n_estimators_uni":
-                for ne in [100, 200, 300, 400, 500]:
-                    ada = AdaBoostClassifier(n_estimators=ne, algorithm="SAMME")
+                for ne in [100, 200, 300, 500][2:]:
+                    ada = AdaBoostClassifier(estimator=e, n_estimators=ne, algorithm="SAMME")
                     auc = self.parametric_identification_cv(ada, False)
                     self.candidates.append(Candidate(ada, auc, ["n_estimators={}".format(ne), n], False))
 
             elif par == "n_estimators_ens":
-                for ne in [10, 15, 20, 25]:
-                    ada = AdaBoostClassifier(n_estimators=ne, algorithm="SAMME")
+                for ne in [10, 15, 20]:
+                    ada = AdaBoostClassifier(estimator=e, n_estimators=ne, algorithm="SAMME")
                     auc = self.parametric_identification_cv(ada, False)
                     self.candidates.append(Candidate(ada, auc, ["n_estimators={}".format(ne), n], False))
 
@@ -100,7 +97,7 @@ class ModelIdentificationSpecific(ModelIdentification):
                                  LogisticRegression(max_iter=100000)], ['None', 'DTC-best', 'DTC-random', 'LR']
         else:  # "_ens" in par
             estimators, names = [GradientBoostingClassifier(loss="log_loss", n_estimators=200, subsample=0.75,
-                                 min_samples_split=2, max_depth=4)], ['GBC']
+                                 min_samples_split=2, max_depth=3)], ['GBC']
 
         for e, n in zip(estimators, names):
             if "max_features" in par:
@@ -108,12 +105,6 @@ class ModelIdentificationSpecific(ModelIdentification):
                     bc = BaggingClassifier(estimator=e, max_features=mf)
                     auc = self.parametric_identification_cv(bc, False)
                     self.candidates.append(Candidate(bc, auc, ["max_features={}".format(mf), n], False))
-
-            elif "oob_score" in par:
-                for oob in [False, True]:
-                    bc = BaggingClassifier(estimator=e, oob_score=oob)
-                    auc = self.parametric_identification_cv(bc, False)
-                    self.candidates.append(Candidate(bc, auc, ["oob_score={}".format(oob), n], False))
 
             elif par == "n_estimators_uni":
                 for ne in [10, 20, 50, 100, 200]:
@@ -195,16 +186,15 @@ class SpecificIdentification:
 
             ax.set(xlabel=par, ylabel='AUC', title='Bigger is better ({}, {}, {})?'.format(model, variant, category[0].pars[-1]))
             ax.grid()
+            plt.savefig("figures/{}-{}-{}-{}.png".format(variant, model, par, category[0].pars[-1]))
             plt.show()
-            #plt.savefig("figures/{}-{}-{}-{}.png".format(variant, model, par, category[0].pars[-1]))
 
 
 def multi_proc():
     confs = [("bc", "max_features_uni",), ("bc", "max_features_ens",), ("bc", "n_estimators_uni",), ("bc", "n_estimators_ens",)]
-    confs = [("bc", "max_features_ens",), ("bc", "n_estimators_ens",)]
-    confs = [("bc", "max_features_uni",)]
-    confs = [("ada", "n_estimators_uni",), ("ada", "n_estimators_ens",)]
-    procs = [Process(target=SpecificIdentification(5, ("h1n1",), (c,)).main) for c in confs]
+    confs = [("ada", "n_estimators_ens",), ("bc", "n_estimators_ens",)]
+    confs = [("ada", "n_estimators_uni",)]
+    procs = [Process(target=SpecificIdentification(1, ("h1n1",), (c,)).main) for c in confs]
 
     for p in procs:
         p.start()

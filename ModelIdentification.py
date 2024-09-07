@@ -164,8 +164,8 @@ class ModelIdentification:
                 self.candidates.append(Candidate(rf, auc, "(c={}, n={})".format(c, n), False))
 
     def ada(self):
-        for n in (10, 50, 100, 200, 300, 400, 500):
-            ada = AdaBoostClassifier(n_estimators=n, algorithm="SAMME")
+        for n in (300, 400, 500):
+            ada = AdaBoostClassifier(estimator=None, n_estimators=n, algorithm="SAMME")
             auc = self.parametric_identification_cv(ada, False)
             self.candidates.append(Candidate(ada, auc, "n={}".format(n), False))
 
