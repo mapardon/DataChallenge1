@@ -1,13 +1,14 @@
 import pickle
 import statistics
+from multiprocessing import Process
 
 import pandas as pd
 
 from DataPreprocessing import DataPreprocessing
 from ModelIdentification import ModelIdentification
 
-PREPROC_STORE = "preproc_config_store"
-MODELS_STORE = "models_trained_store"
+PREPROC_SAVE = "preproc_config_save"
+MODELS_SAVE = "models_trained_save"
 
 
 class MachineLearningProcedure:
@@ -47,11 +48,19 @@ class MachineLearningProcedure:
         self.dp_short = dp_short
 
     def main(self):
+        procs = list()
         for variant in self.variant:
             if "pre" in self.steps:
-                self.preprocessing(variant)
+                procs.append(Process(target=self.preprocessing, args=(variant,)))
             if "mi" in self.steps:
-                self.model_identification(variant)
+                procs.append(Process(target=self.model_identification, args=(variant,)))
+
+        for p in procs:
+            p.start()
+
+        for p in procs:
+            p.join()
+
         if "exp" in self.steps:
             self.exploitation_loop()
 
@@ -143,7 +152,7 @@ class MachineLearningProcedure:
         print("\n * Final configuration")
         print(", ".join(["{}: {}".format(k, self.final_confs[variant][k]) for k in self.final_confs[variant]]))
 
-        pickle.dump(self.final_confs, open(PREPROC_STORE, "wb"))
+        pickle.dump(self.final_confs, open(PREPROC_SAVE, "wb"))
 
         if self.store:
             self.store_datasets(variant, conf)
@@ -256,7 +265,7 @@ class MachineLearningProcedure:
 
         self.final_models[variant] = candidates[0].model
 
-        pickle.dump(self.final_models, open(MODELS_STORE, "wb"))
+        pickle.dump(self.final_models, open(MODELS_SAVE, "wb"))
 
     @staticmethod
     def format_model_exp_output(models_perf):

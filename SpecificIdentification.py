@@ -1,4 +1,6 @@
+import pickle
 import statistics
+import time
 from multiprocessing import Process
 
 import pandas as pd
@@ -118,13 +120,23 @@ class ModelIdentificationSpecific(ModelIdentification):
                     auc = self.parametric_identification_cv(bc, False)
                     self.candidates.append(Candidate(bc, auc, ["n_estimators={}".format(ne), n], False))
 
+    def bc_long(self, par):
+        # par = h1n1/seas
+        e = GradientBoostingClassifier(loss="log_loss", n_estimators=200, subsample=0.75, min_samples_split=2, max_depth=3)
+        ne = 45
+        bc = BaggingClassifier(estimator=e, n_estimators=ne)
+        auc = self.parametric_identification_cv(bc, False)
+        self.candidates.append(Candidate(bc, auc, ["n_estimators={}".format(ne), "GBC"], False))
+
+        pickle.dump(bc, open("bc_long_save_{}".format(par), "wb"))
+
 
 class SpecificIdentification:
     """
         In-depth identification for highly-parametric models
     """
 
-    def __init__(self, exp_rounds, variants, models_pars=(("ada", None),)):
+    def __init__(self, exp_rounds, variants, models_pars=(("bcl", None),)):
         self.exp_rounds = exp_rounds
         self.variants = variants
         self.models_pars = models_pars
@@ -146,7 +158,7 @@ class SpecificIdentification:
         candidates = list()
         for i in range(self.exp_rounds):
             mi = ModelIdentificationSpecific(*final_train_sets[i], *final_test_sets[i], cv_folds=5, verbose=True)
-            mods_dict = {"ada": mi.ada, "gbc": mi.gbc, "hgb": mi.hgb, "bc": mi.bc}
+            mods_dict = {"ada": mi.ada, "gbc": mi.gbc, "hgb": mi.hgb, "bc": mi.bc, "bcl": mi.bc_long}
             mods_dict[model]() if par is None else mods_dict[model](par)
             mi.model_selection(n=1000)
             candidates += mi.model_testing()
@@ -187,14 +199,13 @@ class SpecificIdentification:
             ax.set(xlabel=par, ylabel='AUC', title='Bigger is better ({}, {}, {})?'.format(model, variant, category[0].pars[-1]))
             ax.grid()
             plt.savefig("figures/{}-{}-{}-{}.png".format(variant, model, par, category[0].pars[-1]))
-            plt.show()
+            #plt.show()
 
 
 def multi_proc():
-    confs = [("bc", "max_features_uni",), ("bc", "max_features_ens",), ("bc", "n_estimators_uni",), ("bc", "n_estimators_ens",)]
-    confs = [("ada", "n_estimators_ens",), ("bc", "n_estimators_ens",)]
-    confs = [("ada", "n_estimators_uni",)]
-    procs = [Process(target=SpecificIdentification(1, ("h1n1",), (c,)).main) for c in confs]
+    confs = [("bcl", "h1n1"), ("bcl", "seas")]
+    variants = ["h1n1", "seas"]
+    procs = [Process(target=SpecificIdentification(1, (v,), (c,)).main) for c, v in zip(confs, variants)]
 
     for p in procs:
         p.start()
@@ -204,9 +215,11 @@ def multi_proc():
 
 
 def uni_proc():
-    SpecificIdentification(1, ("h1n1",), (("gbc", "n_estimators"),)).main()
+    SpecificIdentification(1, ("h1n1", "seas"), (("bcl", "h1n1"),)).main()
 
 
 if __name__ == '__main__':
 
+    t = time.time()
     multi_proc()
+    print(time.time() - t)
