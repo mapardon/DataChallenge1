@@ -20,15 +20,13 @@ class DataPreprocessing:
 
         self.short = short
 
-    def training_preprocessing_pipeline(self, variant, features_src, labels_src, imp_num, imp_obj, nn, numerizer, scaler, feat_selector):
+    def training_preprocessing_pipeline(self, features_src, labels_src, imp_num, imp_obj, nn, numerizer, scaler, feat_selector):
         """ Shortcut for loading and applying all preprocessing operations and returning processed dataset.
         Train/test sets are separated to apply only relevant treatments on test set (e.g., no outlier removal) """
 
-        self.load_train_test_datasets(features_src, labels_src, variant)
-        n_test = len(self.test_features)
+        self.load_datasets(features_src, labels_src)
+        n_test = round(len(self.features) / 4)
 
-        self.features = pd.concat([self.features, self.test_features], copy=False, ignore_index=True)
-        self.labels = pd.concat([self.labels, self.test_labels], copy=False, ignore_index=True)
         self.missing_values_imputation(imp_num, imp_obj)
         self.numerize_categorical_features(numerizer)
         self.features_scaling(scaler)
@@ -39,6 +37,7 @@ class DataPreprocessing:
         self.test_labels = self.labels[len(self.labels) - n_test:]
         self.labels = self.labels[:len(self.labels) - n_test]
 
+        # only operation submitted to train test but not test set
         self.outlier_detection(nn)
 
         return self.get_train_test_datasets()
@@ -76,15 +75,15 @@ class DataPreprocessing:
         """ Manage featureless challenge dataset """
         return self.resp_id, self.features
 
-    def load_train_test_datasets(self, features_src, labels_src, variant):
+    def load_datasets(self, features_src, labels_src):
         features = pd.read_csv(features_src)
         labels = pd.read_csv(labels_src)
-        variant = "h1n1_vaccine" if variant == "h1n1" else "seasonal_vaccine"
+        self.shuffle_datasets(features, labels)
 
+    def shuffle_datasets(self, features, labels):
         # shuffle dataset (and reset indexes)
         ds = features
-
-        ds[[variant]] = labels[[variant]]
+        ds[[labels.columns.to_list()[-1]]] = labels[[labels.columns.to_list()[-1]]]
         ds = ds.sample(frac=1)
         ds.reset_index(inplace=True, drop=True)
 
@@ -94,14 +93,8 @@ class DataPreprocessing:
             ds = ds[:500]
 
         # split features/labels and remove respondent_id
-        features = ds[ds.columns.to_list()[1:-2]]
-        labels = ds[variant]
-
-        # split train-test sets
-        self.features = features[:round(len(features) * 0.75)]
-        self.labels = labels[:round(len(labels) * 0.75)]
-        self.test_features = features[round(len(features) * 0.75):]
-        self.test_labels = labels[round(len(labels) * 0.75):]
+        self.labels = ds[ds.columns.to_list()[-1]]
+        self.features = ds[ds.columns.to_list()[1:-1]]
 
     def load_challenge_dataset(self, features_src):
         self.features = pd.read_csv(features_src)

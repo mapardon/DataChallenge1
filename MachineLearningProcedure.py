@@ -152,7 +152,7 @@ class MachineLearningProcedure:
         print("\n * Final configuration")
         print(", ".join(["{}: {}".format(k, self.final_confs[variant][k]) for k in self.final_confs[variant]]))
 
-        pickle.dump(self.final_confs, open(PREPROC_SAVE, "wb"))
+        pickle.dump(self.final_confs, open(PREPROC_SAVE + "_" + variant, "wb"))
 
         if self.store:
             self.store_datasets(variant, conf)
@@ -173,8 +173,8 @@ class MachineLearningProcedure:
 
             # Data preprocessing
             dp = DataPreprocessing(short=self.dp_short)
-            ds = dp.training_preprocessing_pipeline(variant, "data/training_set_features.csv",
-                                                    "data/training_set_labels.csv",
+            ds = dp.training_preprocessing_pipeline("data/training_set_features.csv",
+                                                    "data/training_set_labels_{}.csv".format(variant),
                                                     imp_num, imp_obj, nn, numerizer, scaler, feat_selector)
             out_removed.append(dp.get_outlier_detection_res())
             corr_removed.append(dp.get_feature_selection_res())
@@ -195,23 +195,17 @@ class MachineLearningProcedure:
 
         return best_models, outlier_detect_res, (corr_removed_res, feat_select_res, selected_features), best_models_perfs
 
-    def store_datasets(self, variant, conf):
+    @staticmethod
+    def store_datasets(variant, conf):
         # Prepare datasets with parameters previously defined to avoid recomputing them unnecessarily
-        final_train_sets = list()
-        final_test_sets = list()
-        for _ in range(self.exp_rounds):
-            ds = DataPreprocessing().training_preprocessing_pipeline(variant, "data/training_set_features.csv",
-                                                                     "data/training_set_labels.csv",
-                                                                     conf["imp_num"], conf["imp_obj"], conf["out_detect"],
-                                                                     conf["numerizer"], conf["scaler"], conf["selected_features"])
-            final_train_sets.append(ds[:2])
-            final_test_sets.append(ds[2:])
+        ds = DataPreprocessing().training_preprocessing_pipeline("data/training_set_features.csv",
+                                                                 "data/training_set_labels.csv",
+                                                                 conf["imp_num"], conf["imp_obj"], conf["out_detect"],
+                                                                 conf["numerizer"], conf["scaler"], conf["selected_features"])
 
-        for i in range(self.exp_rounds):
-            for df, name in zip(final_train_sets[i], ["features", "labels"]):
-                df.to_pickle("serialized_df/trs_{}_{}_{}".format(variant, name, str(i)))
-            for df, name in zip(final_test_sets[i], ["features", "labels"]):
-                df.to_pickle("serialized_df/tss_{}_{}_{}".format(variant, name, str(i)))
+        features, labels = pd.concat([ds[0], ds[2]], axis="rows"), pd.concat([ds[1], ds[3]], axis="rows")
+        features.to_pickle("serialized_df/features_{}".format(variant))
+        labels.to_pickle("serialized_df/labels_{}".format(variant))
 
     @staticmethod
     def format_data_exp_output(conf_perf):
@@ -227,34 +221,20 @@ class MachineLearningProcedure:
             different learning algorithms
         """
 
-        final_train_sets, final_test_sets = list(), list()
-        if "pre" not in self.steps:
-            # use pre-preprocessed datasets to avoid recomputing them every time
-            f1, f2, f3, f4 = ("serialized_df/trs_{}_features_{}", "serialized_df/trs_{}_labels_{}",
-                              "serialized_df/tss_{}_features_{}", "serialized_df/tss_{}_labels_{}")
+        f1, f2 = ("serialized_df/features_{}".format(variant), "serialized_df/labels_{}".format(variant))
+        if self.dp_short:
+            f1, f2 = f1 + "_short", f2 + "_short"
 
-            if self.dp_short:
-                for f in (f1, f2, f3, f4):
-                    f += "_short"
-
-            for i in range(self.exp_rounds):
-                final_train_sets.append((pd.read_pickle(f1.format(variant, str(i))),
-                                         pd.read_pickle(f2.format(variant, str(i)))))
-                final_test_sets.append((pd.read_pickle(f3.format(variant, str(i))),
-                                        pd.read_pickle(f4.format(variant, str(i)))))
-
-        else:
-            for i in range(self.exp_rounds):
-                pf = self.final_confs[variant]
-                dp = DataPreprocessing(self.dp_short)
-                ds = dp.training_preprocessing_pipeline(variant, "data/training_set_features.csv", "data/training_set_labels.csv", pf["imp_num"], pf["imp_obj"], pf["out_detect"], pf["scaler"], pf["numerizer"], pf["selected_features"])
-                final_train_sets.append(ds[:2])
-                final_test_sets.append(ds[2:])
-
-        # Train models with CV and test performance on unused test set
         candidates = list()
         for i in range(self.exp_rounds):
-            mi = ModelIdentification(*final_train_sets[i], *final_test_sets[i], cv_folds=5, verbose=True)
+            # load & reshuffle preprocessed dataset
+            features, labels = pd.read_pickle(f1), pd.read_pickle(f2)
+            dp = DataPreprocessing(self.dp_short)
+            dp.shuffle_datasets(features, labels)
+            train_features, train_labels, test_features, test_labels = dp.get_train_test_datasets()
+
+            # Train models with CV and test performance on unused test set
+            mi = ModelIdentification(train_features, train_labels, test_features, test_labels, cv_folds=5, verbose=True)
             mi.model_identification(self.mi_models)
             mi.model_selection()
             candidates += mi.model_testing()
@@ -265,7 +245,8 @@ class MachineLearningProcedure:
 
         self.final_models[variant] = candidates[0].model
 
-        pickle.dump(self.final_models, open(MODELS_SAVE, "wb"))
+        if self.store:
+            pickle.dump(self.final_models, open(MODELS_SAVE + "_" + variant, "wb"))
 
     @staticmethod
     def format_model_exp_output(models_perf):
@@ -278,6 +259,9 @@ class MachineLearningProcedure:
     def exploitation_loop(self):
         """ Finally, we use the models and preprocessing parameters having shown the best performance during training
         to predict challenge data """
+
+        self.final_confs = pickle.load(open("preproc_config_save", 'rb'))
+        self.final_models = pickle.load(open("models_trained_save", 'rb'))
 
         out = {
             "id": None,
