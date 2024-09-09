@@ -62,12 +62,11 @@ class MachineLearningProcedure:
             p.join()
 
         if "exp" in self.steps:
-            self.exploitation_loop()
+            self.model_exploitation()
 
     def preprocessing(self, variant):
         """
-            First we evaluate the influence of different preprocessing parameters (in combination of a fast-training
-            model) in order to preprocess the final dataset
+            First we evaluate the influence of different preprocessing parameters in order to preprocess the final dataset
         """
 
         print("Preprocessing - {}".format(variant))
@@ -109,7 +108,7 @@ class MachineLearningProcedure:
         # Numeric features scaling
         print("\n * Numeric features scaling")
         scaling_res = list()
-        for scaler in ["minmax"]:
+        for scaler in [None, "minmax"]:
             conf = [default_imp_num, default_imp_obj, default_nn, default_numerizer, scaler, default_feat_select]
             best_models, outlier_detect_out, feat_select_out, best_models_perfs = self.preprocessing_exp(*conf, variant)
 
@@ -152,9 +151,8 @@ class MachineLearningProcedure:
         print("\n * Final configuration")
         print(", ".join(["{}: {}".format(k, self.final_confs[variant][k]) for k in self.final_confs[variant]]))
 
-        pickle.dump(self.final_confs, open(PREPROC_SAVE + "_" + variant, "wb"))
-
         if self.store:
+            pickle.dump(self.final_confs, open(PREPROC_SAVE + "_" + variant, "wb"))
             self.store_datasets(variant, conf)
 
     def preprocessing_exp(self, imp_num, imp_obj, nn, numerizer, scaler, feat_selector, variant):
@@ -205,6 +203,7 @@ class MachineLearningProcedure:
 
         features, labels = pd.concat([ds[0], ds[2]], axis="rows"), pd.concat([ds[1], ds[3]], axis="rows")
         features.to_pickle("serialized_df/features_{}".format(variant))
+        print(">>>", type(labels))
         labels.to_pickle("serialized_df/labels_{}".format(variant))
 
     @staticmethod
@@ -230,7 +229,7 @@ class MachineLearningProcedure:
             # load & reshuffle preprocessed dataset
             features, labels = pd.read_pickle(f1), pd.read_pickle(f2)
             dp = DataPreprocessing(self.dp_short)
-            dp.shuffle_datasets(features, labels)
+            dp.shuffle_datasets(features, pd.DataFrame(labels))
             train_features, train_labels, test_features, test_labels = dp.get_train_test_datasets()
 
             # Train models with CV and test performance on unused test set
@@ -256,7 +255,7 @@ class MachineLearningProcedure:
             print("Performance (ROC) -> avg: {}, stdev: {}".format(round(statistics.mean(perfs), 5),
                                                                    round(statistics.stdev(perfs), 5)))
 
-    def exploitation_loop(self):
+    def model_exploitation(self):
         """ Finally, we use the models and preprocessing parameters having shown the best performance during training
         to predict challenge data """
 

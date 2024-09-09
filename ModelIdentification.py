@@ -33,7 +33,7 @@ class ModelIdentification:
         self.test_features = test_features
         self.test_labels = test_labels
 
-        self.cv_folds = cv_folds
+        self.cv_folds = max(cv_folds, 2)
         self.candidates: list[Candidate] = list()
         self.verbose = verbose
 
