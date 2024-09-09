@@ -1,3 +1,4 @@
+import time
 from multiprocessing import Process
 
 from MachineLearningProcedure import MachineLearningProcedure
@@ -18,10 +19,12 @@ def multi_proc():
 
 def uni_proc():
     # steps: pre, mi, exp
-    MachineLearningProcedure(5, variant=("h1n1",), steps=("pre",), store=False,
+    MachineLearningProcedure(3, variants=("h1n1",), steps=("pre",), store=False,
                              mi_models=("lm",), dp_short=False).main()
 
 
 if __name__ == '__main__':
 
+    t = time.time()
     uni_proc()
+    print(time.time() - t)

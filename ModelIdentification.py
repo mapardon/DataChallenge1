@@ -10,7 +10,7 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
-from sklearn.metrics import roc_auc_score, accuracy_score
+from sklearn.metrics import roc_auc_score
 
 
 class Candidate:
@@ -47,16 +47,14 @@ class ModelIdentification:
         return expit(model.predict(test_features)) if is_reg_model else model.predict_proba(test_features)[:, 1]
 
     def model_testing(self):
-        """
-            Train selected candidates on complete training set and assess performance on unused test set
-        """
+        """ Train selected candidates on complete training set and assess performance on unused test set. """
 
         for i in range(len(self.candidates)):
-            m, pars = self.candidates[i].model, self.candidates[i].pars
+            m = self.candidates[i].model
             m.fit(self.train_features, self.train_labels)
             y_i_ts_pred_prob = expit(m.predict(self.test_features)) if self.candidates[i].is_reg_model else m.predict_proba(self.test_features)[:, 1]
             auc = roc_auc_score(self.test_labels, y_i_ts_pred_prob)
-            self.candidates[i].model, self.candidates[i].auc, self.candidates[i].pars = m, auc, pars
+            self.candidates[i].model, self.candidates[i].auc = m, auc
         self.candidates.sort(reverse=True, key=lambda x: x.auc)
 
         # print results of testing of most promising models
@@ -69,11 +67,8 @@ class ModelIdentification:
         return self.candidates
 
     def model_selection(self, n=10):
-        """
-            Select most promising models based on performance on validation sets.
-            For now, we simply take the 10 best performing algorithms, but we could consider creation of heterogeneous
-            ensemble model
-        """
+        """ Select most promising models based on performance on validation sets. """
+
         # Keep max n best models
         self.candidates = sorted(self.candidates, reverse=True, key=lambda x: statistics.mean(x.auc))[:min(n, len(self.candidates))]
 
@@ -82,7 +77,7 @@ class ModelIdentification:
             Generic loop training the provided model on the training set (split in training/validation
             folds) and assessing performance.
 
-            :return: AUC of the models of the different loops,
+            :return: AUC of the models of the different loops
         """
 
         n_rows_fold = len(self.train_features) // self.cv_folds
@@ -108,8 +103,15 @@ class ModelIdentification:
 
         return auc
 
+    def preprocessing_model_identification(self, model):
+        """ For preprocessing experiments, don't compute parametric identification loop """
+        m, pars = {"lm": (LinearRegression(), str()),
+                   "gbc": (GradientBoostingClassifier(loss="log_loss", n_estimators=250,
+                                                      subsample=0.75, min_samples_split=2, max_depth=3), "s=0.75")}[model]
+        self.candidates.append(Candidate(m, float(), pars, type(m) is LinearRegression))
+
     # Methods corresponding to the "structural identification" step for the different model types
-    
+
     def model_identification(self, models):
         for m in models:
             {"lm": self.lm, "lr": self.lr, "ridge": self.ridge, "gnb": self.gnb, "gpc": self.gpc, "tree": self.tree,

@@ -16,7 +16,7 @@ class MachineLearningProcedure:
         Main class initiating different steps of the complete procedure
     """
 
-    def __init__(self, exp_rounds=5, variant=("h1n1", "flu"), steps=("pre", "id", "exp"), store=False, mi_models=("lm",), dp_short=False):
+    def __init__(self, exp_rounds=5, variants=("h1n1", "flu"), steps=("pre", "id", "exp"), store=False, mi_models=("lm",), dp_short=False):
         self.exp_rounds = exp_rounds
         self.final_confs = {
             "h1n1": {
@@ -41,15 +41,15 @@ class MachineLearningProcedure:
 
         self.final_models = {"h1n1": None, "seas": None}
 
-        self.variant = variant
+        self.variants = variants
         self.steps = steps
         self.store = store
-        self.mi_models = mi_models
         self.dp_short = dp_short
+        self.mi_models = mi_models
 
     def main(self):
         procs = list()
-        for variant in self.variant:
+        for variant in self.variants:
             if "pre" in self.steps:
                 procs.append(Process(target=self.preprocessing, args=(variant,)))
             if "mi" in self.steps:
@@ -144,10 +144,10 @@ class MachineLearningProcedure:
         # Store configuration having shown the highest performance average over experiments
         conf = self.final_confs["h1n1"] if variant == "h1n1" else self.final_confs["seas"]
         (conf["imp_num"], conf["imp_obj"], conf["out_detect"], _, conf["numerizer"],
-         conf["scaler"], _, conf["selected_features"]) = sorted(
+         conf["scaler"], conf["feat_selector"], conf["selected_features"]) = sorted(
             imputation_res + outliers_res + scaling_res + feat_select_res + combination_res,
             reverse=True, key=lambda x: statistics.mean(x[2]))[0][1]
-        conf["selected_features"] = conf["selected_features"][2]  # retrieve features list
+        conf["selected_features"] = conf["selected_features"][2]  # retrieve features list and discard output info
         print("\n * Final configuration")
         print(", ".join(["{}: {}".format(k, self.final_confs[variant][k]) for k in self.final_confs[variant]]))
 
@@ -178,9 +178,8 @@ class MachineLearningProcedure:
             corr_removed.append(dp.get_feature_selection_res())
 
             # Model identification and validation
-            mi = ModelIdentification(*ds, cv_folds=5)
-            mi.lm()
-            mi.model_selection()
+            mi = ModelIdentification(*ds, cv_folds=5, verbose=False)
+            mi.preprocessing_model_identification("lm")
             candidates = mi.model_testing()
             best_models.append(candidates[0].model)
             best_models_perfs.append(candidates[0].auc)
