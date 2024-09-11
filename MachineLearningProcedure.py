@@ -17,6 +17,15 @@ class MachineLearningProcedure:
     """
 
     def __init__(self, exp_rounds=5, variants=("h1n1", "flu"), steps=("pre", "id", "exp"), store=False, mi_models=("lm",), dp_short=False):
+        """
+        :param exp_rounds: How many times the whole procedure must be run
+        :param variants: Which variant to treat in the procedure
+        :param steps: Procedure steps to be executed (can be executed independently due to storage of processed data)
+        :param store: Store results (preprocessed data and experiments results)
+        :param mi_models: Models to analyze for model identification phase
+        :param dp_short: Consider short version of the dataset (debug purpose)
+        """
+
         self.exp_rounds = exp_rounds
         self.final_confs = {
             "h1n1": {
@@ -63,6 +72,8 @@ class MachineLearningProcedure:
 
         if "exp" in self.steps:
             self.model_exploitation()
+
+    # PREPROCESSING
 
     def preprocessing(self, variant):
         """
@@ -213,6 +224,8 @@ class MachineLearningProcedure:
                 conf[0], conf[1], conf[2], conf[3], conf[4], conf[5], conf[6], conf[7][0], conf[7][1]))
             print("\t-> avg: {}, stdev: {}".format(round(statistics.mean(perf), 5), round(statistics.stdev(perf), 5)))
 
+    # MODEL IDENTIFICATION
+
     def model_identification(self, variant):
         """
             Using the pre-processed datasets with the previously chosen parameters, we now test the performance of
@@ -253,6 +266,8 @@ class MachineLearningProcedure:
                 print("{}: {}".format(m[0], m[1]))
             print("Performance (ROC) -> avg: {}, stdev: {}".format(round(statistics.mean(perfs), 5),
                                                                    round(statistics.stdev(perfs), 5)))
+
+    # MODEL EXPLOITATION
 
     def model_exploitation(self):
         """ Finally, we use the models and preprocessing parameters having shown the best performance during training

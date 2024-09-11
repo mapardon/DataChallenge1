@@ -2,7 +2,7 @@ import time
 from multiprocessing import Process
 
 from MachineLearningProcedure import MachineLearningProcedure
-from SpecificIdentification import multi_proc
+from MLProcedureExtended import multi_proc
 
 
 def multi_proc():
@@ -25,6 +25,4 @@ def uni_proc():
 
 if __name__ == '__main__':
 
-    t = time.time()
     uni_proc()
-    print(time.time() - t)
