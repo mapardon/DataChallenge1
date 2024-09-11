@@ -2,15 +2,12 @@ import statistics
 
 import pandas as pd
 from scipy.special import expit
-from sklearn.ensemble import VotingClassifier, RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier, \
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier, \
     BaggingClassifier
-from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.linear_model import LinearRegression, RidgeClassifier, LogisticRegression
-from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import roc_auc_score
 from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.svm import SVC
-from sklearn.metrics import roc_auc_score
 
 
 class Candidate:
@@ -114,8 +111,8 @@ class ModelIdentification:
 
     def model_identification(self, models):
         for m in models:
-            {"lm": self.lm, "lr": self.lr, "ridge": self.ridge, "gnb": self.gnb, "gpc": self.gpc, "tree": self.tree,
-             "forest": self.forest, "ada": self.ada, "gbc": self.gbc, "bc": self.bc, "svm": self.svm, "nn": self.nn}[m]()
+            {"lm": self.lm, "lr": self.lr, "ridge": self.ridge, "tree": self.tree, "forest": self.forest,
+             "ada": self.ada, "gbc": self.gbc, "bc": self.bc, "nn": self.nn}[m]()
 
         # print results of model identification operations
         if self.verbose:
@@ -140,16 +137,6 @@ class ModelIdentification:
             ridge = RidgeClassifier(alpha=alpha)
             auc = self.parametric_identification_cv(ridge, True)
             self.candidates.append(Candidate(ridge, auc, "alpha={}".format(alpha), True))
-
-    def gnb(self):
-        gnb = GaussianNB()
-        auc = self.parametric_identification_cv(gnb, False)
-        self.candidates.append(Candidate(gnb, auc, str(), False))
-
-    def gpc(self):
-        gpc = GaussianProcessClassifier()
-        auc = self.parametric_identification_cv(gpc, False)
-        self.candidates.append(Candidate(gpc, auc, str(), False))
 
     def tree(self):
         for c in ["entropy", "gini", "log_loss"]:
@@ -184,32 +171,12 @@ class ModelIdentification:
         auc = self.parametric_identification_cv(bc, False)
         self.candidates.append(Candidate(bc, auc, "estimators={}".format("GBC"), False))
 
-    def svm(self):
-        for kernel in ['linear', 'poly', 'rbf', 'sigmoid']:
-            svc = SVC(kernel=kernel, probability=True)
-            auc = self.parametric_identification_cv(svc, False)
-            self.candidates.append(Candidate(svc, auc, "kernel={}".format(kernel), False))
-
     def nn(self):
-        best_perf = -1.0
-        best_conf = [None, None, None]
-        for size in [50, 100, 200, 500]:
-            for act_f in ['logistic', 'tanh', 'relu']:
-                for solver in ['lbfgs', 'sgd', 'adam']:
-                    nn = MLPClassifier(hidden_layer_sizes=[size], activation=act_f, solver=solver)
-                    auc = self.parametric_identification_cv(nn, False)
-                    self.candidates.append(Candidate(nn, auc, "hidd_lay_sz={}, act_f={}, solver={}".format(size, act_f, solver), False))
+        nn = MLPClassifier(hidden_layer_sizes=[100], activation="logistic", solver="sgd", max_iter=300)
+        auc = self.parametric_identification_cv(nn, False)
+        self.candidates.append(Candidate(nn, auc, "act_f={}".format("logistic"), False))
 
-                    tmp_perf = statistics.mean(list(auc))
-                    if tmp_perf > best_perf:
-                        best_perf = tmp_perf
-                        best_conf = [size, act_f, solver]
-
-        # best configuration: try an ensemble model
-        nn_ens = [("nn-{}".format(str(i)), MLPClassifier(hidden_layer_sizes=best_conf[0], activation=best_conf[1], solver=best_conf[2])) for i in range(50)]
-        vc = VotingClassifier(estimators=nn_ens, voting="soft")
-        auc = self.parametric_identification_cv(vc, False)
-        self.candidates.append(Candidate(vc, auc, "hidd_lay_sz={}, act_f={}, solver={}".format(*best_conf), False))
+        # best configuration: try an ensemble model (?)
 
     # Display results
 
