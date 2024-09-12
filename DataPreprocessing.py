@@ -1,14 +1,24 @@
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
-from sklearn.feature_selection import mutual_info_classif, f_classif
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.feature_selection import mutual_info_classif, f_classif, RFE
 from sklearn.impute import SimpleImputer, KNNImputer
+from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 
 
+MODELS = {"lr": LogisticRegression(max_iter=10000),
+          "gbc": GradientBoostingClassifier(loss="log_loss", n_estimators=250, subsample=0.75,
+                                            min_samples_split=2, max_depth=3)}
+
+
 class DataPreprocessing:
-    def __init__(self, short=False):
+    def __init__(self, short=False, dp_model="lr"):
+        self.short = short
+        self.dp_model = MODELS[dp_model]
+
         self.features: pd.DataFrame | None = None
         self.labels: pd.DataFrame | None = None
         self.test_features: pd.DataFrame | None = None
@@ -18,13 +28,15 @@ class DataPreprocessing:
         self.out_detect_res = None
         self.feat_sel_res = None
 
-        self.short = short
-
     def training_preprocessing_pipeline(self, features_src, labels_src, imp_num, imp_obj, nn, numerizer, scaler, feat_selector):
         """ Shortcut for loading and applying all preprocessing operations and returning processed dataset.
         Train/test sets are separated to apply only relevant treatments on test set (e.g., no outlier removal) """
 
-        self.load_datasets(features_src, labels_src)
+        if type(features_src) is str:
+            self.load_datasets(features_src, labels_src)
+        elif type(features_src) is pd.DataFrame:
+            self.features, self.labels = features_src, labels_src
+
         n_test = round(len(self.features) / 4)
 
         self.missing_values_imputation(imp_num, imp_obj)
@@ -52,6 +64,9 @@ class DataPreprocessing:
         self.feature_selection(feat_selector)
 
         return self.get_challenge_dataset()
+
+    def get_features_labels(self):
+        return self.features, self.labels
 
     def get_train_test_datasets(self):
         """
@@ -253,13 +268,21 @@ class DataPreprocessing:
         """ Calls the procedure removing highly correlated features (similar idea as this function) then calls the
         adequate feature_selection procedure depending on the type of the feat_selector parameter
 
-        :returns: number of correlated features removed, final number of features selected by procedure, list of
-         selected features """
+        :returns: final number of features selected by procedure, list of selected features """
 
         n_corr_removed = int()
         if feat_selector in ["mut_inf", "f_stat"]:
             n_corr_removed = self.remove_corr_features()
             self.feature_selection_proc(feat_selector)
+
+        elif feat_selector == "RFE":
+            # fit estimator
+            estimator = self.dp_model
+            selector = RFE(estimator, n_features_to_select=5, step=1)
+            selector = selector.fit(self.features, self.labels)
+
+            # keep best-ranked features
+            x = selector.support_
 
         elif type(feat_selector) is list:
             self.feature_selection_list(feat_selector)
@@ -285,6 +308,6 @@ class DataPreprocessing:
             self.features = self.features[[f[0] for f in feat_ranking if f[1] < 0.05]]
 
     def feature_selection_list(self, selected_features):
-        """ Select features specified in the list parameter """
+        """ Select features specified in the list parameter (list of features name or boolean list) """
 
         self.features = self.features[selected_features]

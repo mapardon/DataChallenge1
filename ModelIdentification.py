@@ -103,8 +103,11 @@ class ModelIdentification:
     def preprocessing_model_identification(self, model):
         """ For preprocessing experiments, don't compute parametric identification loop """
         m, pars = {"lm": (LinearRegression(), str()),
+                   "lr": (LogisticRegression(max_iter=10000), str()),
                    "gbc": (GradientBoostingClassifier(loss="log_loss", n_estimators=250,
-                                                      subsample=0.75, min_samples_split=2, max_depth=3), "s=0.75")}[model]
+                                                      subsample=0.75, min_samples_split=2, max_depth=3), "s=0.75"),
+                   "bc": (BaggingClassifier(estimator=GradientBoostingClassifier(loss="log_loss", n_estimators=200, subsample=0.75, min_samples_split=2, max_depth=3), n_estimators=10),
+                          "estimators={}".format("GBC"))}[model]
         self.candidates.append(Candidate(m, float(), pars, type(m) is LinearRegression))
 
     # Methods corresponding to the "structural identification" step for the different model types
