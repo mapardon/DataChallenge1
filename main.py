@@ -17,7 +17,7 @@ def multi_proc():
 
 def uni_proc():
     # steps: pre, mi, exp
-    MachineLearningProcedure(3, variants=("h1n1", "seas"), steps=("pre",), store=False,
+    MachineLearningProcedure(3, variants=("h1n1", "seas"), steps=("exp",), store=True,
                              dp_model="lr", mi_models=("lm",), dp_short=False).main()
 
 

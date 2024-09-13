@@ -58,7 +58,6 @@ class DataPreprocessing:
         self.load_challenge_dataset(features_src)
 
         self.missing_values_imputation(imp_num, imp_obj)
-        self.outlier_detection(nn)
         self.numerize_categorical_features(numerizer)
         self.features_scaling(scaler)
         self.feature_selection(feat_selector)
@@ -109,7 +108,9 @@ class DataPreprocessing:
 
         # split features/labels and remove respondent_id
         self.labels = ds[ds.columns.to_list()[-1]]
-        self.features = ds[ds.columns.to_list()[1:-1]]
+        self.features = ds[ds.columns.to_list()[:-1]]
+        if "respondent_id" in self.features:
+            self.features.pop("respondent_id")
 
     def load_challenge_dataset(self, features_src):
         self.features = pd.read_csv(features_src)

@@ -189,8 +189,8 @@ class MachineLearningProcedure:
         print(", ".join(["{}: {}".format(k, self.final_confs[variant][k]) for k in self.final_confs[variant]]))
 
         if self.store:
-            pickle.dump(self.final_confs, open(PREPROC_SAVE + "_" + variant, "wb"))
-            self.store_datasets(variant, conf)
+            pickle.dump(self.final_confs[variant], open(PREPROC_SAVE + "_" + variant, "wb"))
+            self.store_datasets(variant, self.final_confs[variant])
 
     def preprocessing_exp(self, imp_num, imp_obj, nn, numerizer, scaler, feat_selector):
         """
@@ -206,7 +206,9 @@ class MachineLearningProcedure:
 
         # Data preprocessing
         dp = DataPreprocessing(short=self.dp_short)
-        ds = dp.training_preprocessing_pipeline(self.preproc_features.copy(deep=True), self.preproc_labels.copy(deep=True),
+        tmpf = self.preproc_features.copy(deep=True)
+        tmpl = self.preproc_labels.copy(deep=True)
+        ds = dp.training_preprocessing_pipeline(tmpf, tmpl,
                                                 imp_num, imp_obj, nn, numerizer, scaler, feat_selector)
         out_removed.append(dp.get_outlier_detection_res())
         corr_removed.append(dp.get_feature_selection_res())
@@ -237,6 +239,8 @@ class MachineLearningProcedure:
         features, labels = pd.concat([ds[0], ds[2]], axis="rows"), pd.concat([ds[1], ds[3]], axis="rows")
         features.to_pickle("serialized_df/features_{}".format(variant))
         labels.to_pickle("serialized_df/labels_{}".format(variant))
+        features[:200].to_pickle("serialized_df/features_{}_short".format(variant))
+        labels[:200].to_pickle("serialized_df/labels_{}_short".format(variant))
 
     @staticmethod
     def format_data_exp_output(conf_perf):
@@ -279,7 +283,7 @@ class MachineLearningProcedure:
         self.final_models[variant] = candidates[0].model
 
         if self.store:
-            pickle.dump(self.final_models, open(MODELS_SAVE + "_" + variant, "wb"))
+            pickle.dump(self.final_models[variant], open(MODELS_SAVE + "_" + variant, "wb"))
 
     @staticmethod
     def format_model_exp_output(models_perf):
@@ -295,9 +299,6 @@ class MachineLearningProcedure:
         """ Finally, we use the models and preprocessing parameters having shown the best performance during training
         to predict challenge data """
 
-        self.final_confs = pickle.load(open("preproc_config_save", 'rb'))
-        self.final_models = pickle.load(open("models_trained_save", 'rb'))
-
         out = {
             "id": None,
             "h1n1": None,
@@ -305,22 +306,19 @@ class MachineLearningProcedure:
         }
 
         for variant in ["h1n1", "seas"]:
-            conf = self.final_confs[variant]
-
-            # Must predict all challenge tuples
-            final_imp_num = conf["imp_num"]
-            final_imp_obj = conf["imp_obj"]
+            conf = pickle.load(open("preproc_config_save_{}".format(variant), 'rb'))
+            model = pickle.load(open("models_trained_save_{}".format(variant), 'rb'))
 
             # Pre-process challenge data
             dp = DataPreprocessing()
             resp_id, features = dp.challenge_preprocessing_pipeline("data/test_set_features.csv",
-                                                                    final_imp_num, final_imp_obj, conf["out_detect"],
+                                                                    conf["imp_num"], conf["imp_obj"], conf["out_detect"],
                                                                     conf["numerizer"], conf["scaler"],
                                                                     conf["selected_features"])
 
             # Use previously trained model on processed challenge data
             out["id"] = resp_id
-            out[variant] = ModelIdentification.model_exploitation(self.final_models[variant], features)
+            out[variant] = ModelIdentification.model_exploitation(model, features)
 
         pd.DataFrame({
             "respondent_id": out["id"],
