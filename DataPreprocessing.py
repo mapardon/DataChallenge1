@@ -278,12 +278,11 @@ class DataPreprocessing:
 
         elif feat_selector == "RFE":
             # fit estimator
-            estimator = self.dp_model
-            selector = RFE(estimator, n_features_to_select=5, step=1)
+            selector = RFE(self.dp_model, n_features_to_select=0.5, step=1)
             selector = selector.fit(self.features, self.labels)
 
             # keep best-ranked features
-            x = selector.support_
+            self.features = self.features[[c for c, cond in zip(self.features.columns.to_list(), selector.support_) if cond]]
 
         elif type(feat_selector) is list:
             self.feature_selection_list(feat_selector)
@@ -309,6 +308,6 @@ class DataPreprocessing:
             self.features = self.features[[f[0] for f in feat_ranking if f[1] < 0.05]]
 
     def feature_selection_list(self, selected_features):
-        """ Select features specified in the list parameter (list of features name or boolean list) """
+        """ Select features specified in the parameter """
 
         self.features = self.features[selected_features]

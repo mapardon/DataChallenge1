@@ -4,6 +4,7 @@ import pandas as pd
 from sklearn.ensemble import BaggingClassifier, GradientBoostingClassifier, HistGradientBoostingClassifier, \
     AdaBoostClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model._base import LinearModel
 from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
 

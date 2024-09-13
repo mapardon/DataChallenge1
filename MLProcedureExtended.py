@@ -10,10 +10,18 @@ from ModelIdentificationExtended import ModelIdentificationExtended, SpecificCan
 
 class MLProcedureExtended:
     """
-        Alternative to model identification step for highly-parametric models
+        Alternative to model identification step for in-depth algorithms analysis
     """
 
     def __init__(self, exp_rounds, variants, models_pars=(("bcl", None),), dp_short=False):
+        """
+
+        :param exp_rounds: number of experiments to run
+        :param variants: variants to tests (h1n1/seasonal)
+        :param models_pars: name of experiment and eventual specification
+        :param dp_short: whether to use short dataset for debug
+        """
+
         self.exp_rounds = exp_rounds
         self.variants = variants
         self.models_pars = models_pars
@@ -92,6 +100,8 @@ class MLProcedureExtended:
             #plt.savefig("figures/{}-{}-{}-{}.png".format(variant, model, par, category[0].pars[-1]))
             plt.show()
 
+    # UTILS #
+
 
 def floatable(f):
     is_float = True
@@ -100,6 +110,8 @@ def floatable(f):
     except ValueError:
         is_float = False
     return is_float
+
+    # RUN #
 
 
 def multi_proc():
@@ -117,8 +129,8 @@ def multi_proc():
 
 
 def uni_proc():
-    confs = [("nnl", None),]
-    variants = ["h1n1",]
+    confs = (("nnl", None),)
+    variants = ("h1n1",)
     MLProcedureExtended(1, variants, confs, dp_short=False).main()
 
 

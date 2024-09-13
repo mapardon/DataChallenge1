@@ -143,7 +143,7 @@ class MachineLearningProcedure:
 
             # Numerize categorical features & Features selection
             for numerizer in ["remove", "one-hot"]:
-                for feat_select in [None, "mut_inf", "f_stat"]:
+                for feat_select in [None, "mut_inf", "f_stat", "RFE"]:
                     conf = [default_imp_num, default_imp_obj, default_nn, numerizer, default_scaler, feat_select]
                     best_models, outlier_detect_out, feat_select_out, best_models_perfs = self.preprocessing_exp(*conf)
 
@@ -271,7 +271,7 @@ class MachineLearningProcedure:
             train_features, train_labels, test_features, test_labels = dp.get_train_test_datasets()
 
             # Train models with CV and test performance on unused test set
-            mi = ModelIdentification(train_features, train_labels, test_features, test_labels, cv_folds=5, verbose=True)
+            mi = ModelIdentification(train_features, train_labels, test_features, test_labels, cv_folds=10, verbose=True)
             mi.model_identification(self.mi_models)
             mi.model_selection()
             candidates += mi.model_testing()
