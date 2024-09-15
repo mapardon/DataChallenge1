@@ -10,7 +10,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
 
 
-class Candidate:
+class ModelCandidate:
     def __init__(self, model, auc, pars, is_reg_model):
         self.model = model
         self.auc: float = auc
@@ -31,7 +31,7 @@ class ModelIdentification:
         self.test_labels = test_labels
 
         self.cv_folds = max(cv_folds, 2)
-        self.candidates: list[Candidate] = list()
+        self.candidates: list[ModelCandidate] = list()
         self.verbose = verbose
 
     @staticmethod
@@ -101,14 +101,16 @@ class ModelIdentification:
         return auc
 
     def preprocessing_model_identification(self, model):
-        """ For preprocessing experiments, don't compute parametric identification loop """
+        """ For preprocessing experiments, don't compute parametric identification loop (suppose we already know the
+         parameters we want) """
+
         m, pars = {"lm": (LinearRegression(), str()),
                    "lr": (LogisticRegression(max_iter=10000), str()),
                    "gbc": (GradientBoostingClassifier(loss="log_loss", n_estimators=250,
                                                       subsample=0.75, min_samples_split=2, max_depth=3), "s=0.75"),
                    "bc": (BaggingClassifier(estimator=GradientBoostingClassifier(loss="log_loss", n_estimators=200, subsample=0.75, min_samples_split=2, max_depth=3), n_estimators=10),
                           "estimators={}".format("GBC"))}[model]
-        self.candidates.append(Candidate(m, float(), pars, type(m) is LinearRegression))
+        self.candidates.append(ModelCandidate(m, float(), pars, type(m) is LinearRegression))
 
     # Methods corresponding to the "structural identification" step for the different model types
 
@@ -128,56 +130,56 @@ class ModelIdentification:
         # Structural and parametric identification
         lm = LinearRegression()
         auc = self.parametric_identification_cv(lm, True)
-        self.candidates.append(Candidate(lm, auc, str(), True))
+        self.candidates.append(ModelCandidate(lm, auc, str(), True))
 
     def lr(self):
         lr = LogisticRegression(max_iter=100000)
         auc = self.parametric_identification_cv(lr, False)
-        self.candidates.append(Candidate(lr, auc, str(), False))
+        self.candidates.append(ModelCandidate(lr, auc, str(), False))
 
     def ridge(self):
         for alpha in [0.1, 0.5, 1.0, 5.0, 10.0, 20.0]:
             ridge = RidgeClassifier(alpha=alpha)
             auc = self.parametric_identification_cv(ridge, True)
-            self.candidates.append(Candidate(ridge, auc, "alpha={}".format(alpha), True))
+            self.candidates.append(ModelCandidate(ridge, auc, "alpha={}".format(alpha), True))
 
     def tree(self):
         for c in ["entropy", "gini", "log_loss"]:
             for s in ["best", "random"]:
                 dtree = DecisionTreeClassifier(criterion=c, splitter=s)
                 auc = self.parametric_identification_cv(dtree, False)
-                self.candidates.append(Candidate(dtree, auc, "c={}, s={}".format(c, s), False))
+                self.candidates.append(ModelCandidate(dtree, auc, "c={}, s={}".format(c, s), False))
 
     def forest(self):
         for c in ["entropy", "gini", "log_loss"]:
             for n in [10, 20, 50, 100]:
                 rf = RandomForestClassifier(criterion=c, n_estimators=n)
                 auc = self.parametric_identification_cv(rf, False)
-                self.candidates.append(Candidate(rf, auc, "(c={}, n={})".format(c, n), False))
+                self.candidates.append(ModelCandidate(rf, auc, "(c={}, n={})".format(c, n), False))
 
     def ada(self):
         for n in (300, 400, 500):
             ada = AdaBoostClassifier(estimator=None, n_estimators=n, algorithm="SAMME")
             auc = self.parametric_identification_cv(ada, False)
-            self.candidates.append(Candidate(ada, auc, "n={}".format(n), False))
+            self.candidates.append(ModelCandidate(ada, auc, "n={}".format(n), False))
 
     def gbc(self):
         for s in [0.75, 1.0]:
             gbc = GradientBoostingClassifier(loss="log_loss", n_estimators=250, subsample=s,
                                              min_samples_split=2, max_depth=3)
             auc = self.parametric_identification_cv(gbc, False)
-            self.candidates.append(Candidate(gbc, auc, "subsample:{}".format(s), False))
+            self.candidates.append(ModelCandidate(gbc, auc, "subsample:{}".format(s), False))
 
     def bc(self):
         estimator = GradientBoostingClassifier(loss="log_loss", n_estimators=200, subsample=0.75, min_samples_split=2, max_depth=3)
         bc = BaggingClassifier(estimator=estimator, n_estimators=10)
         auc = self.parametric_identification_cv(bc, False)
-        self.candidates.append(Candidate(bc, auc, "estimators={}".format("GBC"), False))
+        self.candidates.append(ModelCandidate(bc, auc, "estimators={}".format("GBC"), False))
 
     def nn(self):
         nn = MLPClassifier(hidden_layer_sizes=[100], activation="logistic", solver="sgd", max_iter=300)
         auc = self.parametric_identification_cv(nn, False)
-        self.candidates.append(Candidate(nn, auc, "act_f={}".format("logistic"), False))
+        self.candidates.append(ModelCandidate(nn, auc, "act_f={}".format("logistic"), False))
 
         # best configuration: try an ensemble model (?)
 
@@ -187,10 +189,9 @@ class ModelIdentification:
     def display_training_result(candidate):
         if type(candidate.auc) is list:
             print("{} ({})".format(str(type(candidate.model)).split('.')[-1][:-2], candidate.pars))
-            print("avg candidate.auc: {}, stddev candidate.auc: {}, max candidate.auc {}, min candidate.auc: {}".format(statistics.mean(candidate.auc),
-                                                                                                                        statistics.stdev(candidate.auc),
-                                                                                                                        max(candidate.auc),
-                                                                                                                        min(candidate.auc)))
+            msg = "avg candidate.auc: {}, stddev candidate.auc: {}, max candidate.auc {}, min candidate.auc: {}"
+            print(msg.format(round(statistics.mean(candidate.auc), 5), round(statistics.stdev(candidate.auc), 5),
+                             round(max(candidate.auc), 5), round(min(candidate.auc), 5)))
         else:
             print("{} ({})".format(str(type(candidate.model)).split('.')[-1][:-2], candidate.pars))
-            print("candidate.auc: {}".format(candidate.auc))
+            print("candidate.auc: {}".format(round(candidate.auc, 5)))

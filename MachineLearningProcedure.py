@@ -2,14 +2,37 @@ import pickle
 import statistics
 from itertools import groupby
 from multiprocessing import Process
+from operator import attrgetter
 
 import pandas as pd
 
 from DataPreprocessing import DataPreprocessing
 from ModelIdentification import ModelIdentification
 
-PREPROC_SAVE = "preproc_config_save"
-MODELS_SAVE = "models_trained_save"
+PREPROC_SAVE = "preproc_config_save_{}"
+MODELS_SAVE = "models_trained_save_{}"
+
+
+class PreprocCandidate:
+    def __init__(self, dp_model=None, auc=None, imp_num=None, imp_obj=None, out_detect=None, out_detect_res=None,
+                 scaler=None, numerizer=None, feat_selector=None, corr_features_out=None, selected_features=None):
+        self.dp_model = dp_model
+        self.auc = auc
+
+        self.imp_num = imp_num
+        self.imp_obj = imp_obj
+        self.out_detect = out_detect
+        self.out_detect_res = out_detect_res
+        self.scaler = scaler
+        self.numerizer = numerizer
+        self.feat_selector = feat_selector
+        self.corr_features_out = corr_features_out
+        self.selected_features = selected_features
+
+    def __repr__(self):
+        return "model={}, imp_num={}, imp_obj={}, knn={}, numerizer={}, scaler={}, feat_select={}".format(
+            str(self.dp_model), self.imp_num, self.imp_obj, self.out_detect, self.numerizer, self.scaler,
+            self.feat_selector)
 
 
 class MachineLearningProcedure:
@@ -18,12 +41,13 @@ class MachineLearningProcedure:
     """
 
     def __init__(self, exp_rounds=5, variants=("h1n1", "flu"), steps=("pre", "id", "exp"), store=False,
-                 dp_model="lm", mi_models=("lm",), short_ds=False):
+                 dp_model_tag="lm", mi_models=("lm",), short_ds=False):
         """
         :param exp_rounds: How many times the whole procedure must be run
         :param variants: Which variant to treat in the procedure
         :param steps: Procedure steps to be executed (can be executed independently due to storage of processed data)
         :param store: Store results (preprocessed data and experiments results)
+        :param dp_model_tag: Short name to indicate which model to use for preprocessing experiments
         :param mi_models: Models to analyze for model identification phase
         :param short_ds: Consider short version of the dataset (debug purpose)
         """
@@ -32,46 +56,29 @@ class MachineLearningProcedure:
         self.variants = variants
         self.steps = steps
         self.store = store
-        self.dp_model = dp_model
+        self.dp_model_tag = dp_model_tag
         self.mi_models = mi_models
         self.short_ds = short_ds
 
         self.preproc_features = None
         self.preproc_labels = None
-        self.final_confs = {
-            "h1n1": {
-                "model": self.dp_model,
-                "imp_num": None,
-                "imp_obj": None,
-                "out_detect": None,
-                "scaler": None,
-                "numerizer": None,
-                "feat_selector": None,
-                "selected_features": list()
-             },
-            "seas": {
-                "model": self.dp_model,
-                "imp_num": None,
-                "imp_obj": None,
-                "out_detect": None,
-                "scaler": None,
-                "numerizer": None,
-                "feat_selector": None,
-                "selected_features": list()
-             }
-        }
+        self.final_confs = {"h1n1": PreprocCandidate(), "seas": PreprocCandidate()}
         self.final_models = {"h1n1": None, "seas": None}
 
     def main(self):
         procs = list()
-        for variant in self.variants:
-            if "pre" in self.steps:
+        if "pre" in self.steps:
+            for variant in self.variants:
                 procs.append(Process(target=self.preprocessing, args=(variant,)))
-            if "mi" in self.steps:
-                procs.append(Process(target=self.model_identification, args=(variant,)))
+            for p in procs: p.start()
+            for p in procs: p.join()
 
-        for p in procs: p.start()
-        for p in procs: p.join()
+        procs = list()
+        if "mi" in self.steps:
+            for variant in self.variants:
+                procs.append(Process(target=self.model_identification, args=(variant,)))
+            for p in procs: p.start()
+            for p in procs: p.join()
 
         if "exp" in self.steps:
             self.model_exploitation()
@@ -101,68 +108,65 @@ class MachineLearningProcedure:
         for i in range(self.exp_rounds):
 
             # init data for experiments
-            dp = DataPreprocessing(self.short_ds, self.dp_model)
+            dp = DataPreprocessing(self.short_ds, self.dp_model_tag)
             dp.load_datasets("data/training_set_features.csv", "data/training_set_labels_{}.csv".format(variant))
             self.preproc_features, self.preproc_labels = dp.get_features_labels()
 
             # Imputation of missing values
             for imp_num in ["remove", "knn", "mean", "median"][1:]:
                 for imp_obj in ["remove", "most_frequent"][1:]:
-                    conf = [imp_num, imp_obj, default_nn, default_numerizer, default_scaler, default_feat_select]
-                    best_models, outlier_detect_out, feat_select_out, best_models_perfs = self.preprocessing_exp(*conf)
+                    pc = PreprocCandidate(imp_num=imp_num, imp_obj=imp_obj, out_detect=default_nn, numerizer=default_numerizer, scaler=default_scaler, feat_selector=default_feat_select)
+                    self.preprocessing_exp(pc)
 
                     if (imp_num, imp_obj) in imputation_res:
-                        imputation_res[(imp_num, imp_obj)][2].append(best_models_perfs[0])
+                        imputation_res[(imp_num, imp_obj)].append(pc)
                     else:
-                        imputation_res[(imp_num, imp_obj)] = [best_models, conf[:3] + [outlier_detect_out] + conf[3:] + [feat_select_out],
-                                           best_models_perfs]
+                        imputation_res[(imp_num, imp_obj)] = [pc]
 
             # Outliers detection
             for nn in [0, 2, 25]:
-                conf = [default_imp_num, default_imp_obj, nn, default_numerizer, default_scaler, default_feat_select]
-                best_models, outlier_detect_out, feat_select_out, best_models_perfs = self.preprocessing_exp(*conf)
+                pc = PreprocCandidate(imp_num=default_imp_num, imp_obj=default_imp_obj, out_detect=nn, numerizer=default_numerizer, scaler=default_scaler, feat_selector=default_feat_select)
+                self.preprocessing_exp(pc)
 
                 if nn in outliers_res:
-                    outliers_res[nn][2].append(best_models_perfs[0])
+                    outliers_res[nn].append(pc)
                 else:
-                    outliers_res[nn] = [best_models, conf[:3] + [outlier_detect_out] + conf[3:] + [feat_select_out],
-                                        best_models_perfs]
+                    outliers_res[nn] = [pc]
 
             # Numeric features scaling
             for scaler in [None, "minmax"]:
-                conf = [default_imp_num, default_imp_obj, default_nn, default_numerizer, scaler, default_feat_select]
-                best_models, outlier_detect_out, feat_select_out, best_models_perfs = self.preprocessing_exp(*conf)
+                pc = PreprocCandidate(imp_num=default_imp_num, imp_obj=default_imp_obj, out_detect=default_nn, numerizer=default_numerizer, scaler=scaler, feat_selector=default_feat_select)
+                self.preprocessing_exp(pc)
 
                 if scaler in scaling_res:
-                    scaling_res[scaler][2].append(best_models_perfs[0])
+                    scaling_res[scaler].append(pc)
                 else:
-                    scaling_res[scaler] = [best_models, conf[:3] + [outlier_detect_out] + conf[3:] + [feat_select_out],
-                                           best_models_perfs]
+                    scaling_res[scaler] = [pc]
 
             # Numerize categorical features & Features selection
             for numerizer in ["remove", "one-hot"]:
                 for feat_select in [None, "mut_inf", "f_stat", "RFE"]:
-                    conf = [default_imp_num, default_imp_obj, default_nn, numerizer, default_scaler, feat_select]
-                    best_models, outlier_detect_out, feat_select_out, best_models_perfs = self.preprocessing_exp(*conf)
+                    pc = PreprocCandidate(imp_num=default_imp_num, imp_obj=default_imp_obj, out_detect=default_nn, numerizer=numerizer, scaler=default_scaler, feat_selector=feat_select)
+                    self.preprocessing_exp(pc)
 
                     if (numerizer, feat_select) in feat_select_res:
-                        feat_select_res[(numerizer, feat_select)][2].append(best_models_perfs[0])
+                        feat_select_res[(numerizer, feat_select)].append(pc)
                     else:
-                        feat_select_res[(numerizer, feat_select)] = [best_models, conf[:3] + [outlier_detect_out] + conf[3:] + [feat_select_out],
-                                                                     best_models_perfs]
+                        feat_select_res[(numerizer, feat_select)] = [pc]
 
         # Change experiments results to list because we need order on the results
-        imputation_res = sorted([imputation_res[k] for k in imputation_res], reverse=True, key=lambda x: x[2])
-        outliers_res = sorted([outliers_res[k] for k in outliers_res], reverse=True, key=lambda x: x[2])
-        scaling_res = sorted([scaling_res[k] for k in scaling_res], reverse=True, key=lambda x: x[2])
-        feat_select_res = sorted([feat_select_res[k] for k in feat_select_res], reverse=True, key=lambda x: x[2])
-        combination_res = sorted([combination_res[k] for k in combination_res], reverse=True, key=lambda x: x[2])
+        imputation_res = sorted([imputation_res[k] for k in imputation_res], reverse=True, key=lambda x: statistics.mean([c.auc for c in x]))
+        outliers_res = sorted([outliers_res[k] for k in outliers_res], reverse=True, key=lambda x: statistics.mean([c.auc for c in x]))
+        scaling_res = sorted([scaling_res[k] for k in scaling_res], reverse=True, key=lambda x: statistics.mean([c.auc for c in x]))
+        feat_select_res = sorted([feat_select_res[k] for k in feat_select_res], reverse=True, key=lambda x: statistics.mean([c.auc for c in x]))
+        combination_res = sorted([combination_res[k] for k in combination_res], reverse=True, key=lambda x: statistics.mean([c.auc for c in x]))
 
         # Attempt with combination of the best parameters value of previous experiments
-        conf = [imputation_res[0][1][0], imputation_res[0][1][1], outliers_res[0][1][2], feat_select_res[0][1][4], scaling_res[0][1][5], feat_select_res[0][1][6]]
-        best_models, outlier_detect_out, feat_select_out, best_models_perfs = self.preprocessing_exp(*conf)
-
-        combination_res.append([best_models, conf[:3] + [outlier_detect_out] + conf[3:] + [feat_select_out], best_models_perfs])
+        pc = PreprocCandidate(imp_num=imputation_res[0][0].imp_num, imp_obj=imputation_res[0][0].imp_obj,
+                              out_detect=outliers_res[0][0].out_detect, scaler=scaling_res[0][0].scaler,
+                              numerizer=feat_select_res[0][0].numerizer, selected_features=feat_select_res[0][0].selected_features)
+        self.preprocessing_exp(pc)
+        combination_res.append([pc])
 
         # Display results
         for title, res in zip([" * Imputation of missing values", "\n * Outliers detection",
@@ -171,59 +175,44 @@ class MachineLearningProcedure:
                                "\n * Combination of best parameters"],
                               [imputation_res, outliers_res, scaling_res, feat_select_res, combination_res]):
             print(title)
-            if "Combination" in title:  # for the experiment with all best other features: print configuration
-                print("conf: ", conf)
             self.format_data_exp_output(res)
 
         # Store configuration having shown the highest performance average over experiments
-        conf = self.final_confs["h1n1"] if variant == "h1n1" else self.final_confs["seas"]
-        (conf["imp_num"], conf["imp_obj"], conf["out_detect"], _, conf["numerizer"],
-         conf["scaler"], conf["feat_selector"], conf["selected_features"]) = sorted(
-            imputation_res + outliers_res + scaling_res + feat_select_res + combination_res,
-            reverse=True, key=lambda x: statistics.mean(x[2]) if len(x[2]) > 1 else x[2])[0][1]
+        self.final_confs[variant] = max(imputation_res + outliers_res + scaling_res + feat_select_res + combination_res,
+                                        key=lambda x: statistics.mean([c.auc for c in x]) if len(x) > 1 else x[0].auc)[0]
 
-        # TODO make struct-like object for configuration results?
-        conf["selected_features"] = conf["selected_features"][2]  # retrieve features list and discard output info
         print("\n * Final configuration")
-        print(", ".join(["{}: {}".format(k, self.final_confs[variant][k]) for k in self.final_confs[variant]]))
+        print(self.final_confs[variant], self.final_confs[variant].selected_features)
 
         if self.store:
-            pickle.dump(self.final_confs[variant], open(PREPROC_SAVE + "_" + variant, "wb"))
+            pickle.dump(self.final_confs[variant], open(PREPROC_SAVE.format(variant), "wb"))
             self.store_datasets(variant, self.final_confs[variant])
 
-    def preprocessing_exp(self, imp_num, imp_obj, nn, numerizer, scaler, feat_selector):
+    def preprocessing_exp(self, preproc_conf):
         """
         Train a linear model with the provided preprocessing parameters to evaluate their influence on model performance
 
         :params: parameters for different preprocessing phases
 
-        :return: list of models, str indicating output of operations for outlier detection/feature
-            selection..., performance of the returned models on the validation phase
+        :return: the object is accessed by reference (normally)
         """
 
-        best_models, best_models_perfs, out_removed, corr_removed = list(), list(), list(), list()
-
         # Data preprocessing
+        pc = preproc_conf
         dp = DataPreprocessing(short=self.short_ds)
         ds = dp.training_preprocessing_pipeline(self.preproc_features.copy(deep=True), self.preproc_labels.copy(deep=True),
-                                                imp_num, imp_obj, nn, numerizer, scaler, feat_selector)
-        out_removed.append(dp.get_outlier_detection_res())
-        corr_removed.append(dp.get_feature_selection_res())
+                                                pc.imp_num, pc.imp_obj, pc.out_detect, pc.numerizer, pc.scaler, pc.feat_selector)
+        # how many outliers/correlated features/useless features are removed
+        pc.out_detect_res = dp.get_outlier_detection_res()
+        pc.corr_features_out, _, pc.selected_features = dp.get_feature_selection_res()
 
         # Model identification and validation
         mi = ModelIdentification(*ds, cv_folds=5, verbose=False)
-        mi.preprocessing_model_identification(self.dp_model)
-        candidates = mi.model_testing()
-        best_models.append(candidates[0].model)
-        best_models_perfs.append(candidates[0].auc)
+        mi.preprocessing_model_identification(self.dp_model_tag)
+        candidates = mi.model_testing()  # 1 single candidate is returned
 
-        # how many outliers/correlated features/useless features removed
-        outlier_detect_res = "{}-{}".format(min(out_removed), max(out_removed))
-        corr_removed_res = "{}-{}".format(min(corr_removed, key=lambda x: x[0])[0], max(corr_removed, key=lambda x: x[0])[0])
-        feat_select_res = "{}-{}".format(min(corr_removed, key=lambda x: x[1])[1], max(corr_removed, key=lambda x: x[1])[1])
-        selected_features = corr_removed[best_models_perfs.index(max(best_models_perfs))][2]
-
-        return best_models, outlier_detect_res, (corr_removed_res, feat_select_res, selected_features), best_models_perfs
+        pc.dp_model = candidates[0].model
+        pc.auc = candidates[0].auc
 
     @staticmethod
     def store_datasets(variant, conf):
@@ -231,8 +220,8 @@ class MachineLearningProcedure:
         preprocessed dataset """
         ds = DataPreprocessing().training_preprocessing_pipeline("data/training_set_features.csv",
                                                                  "data/training_set_labels.csv",
-                                                                 conf["imp_num"], conf["imp_obj"], conf["out_detect"],
-                                                                 conf["numerizer"], conf["scaler"], conf["selected_features"])
+                                                                 conf.imp_num, conf.imp_obj, conf.out_detect,
+                                                                 conf.numerizer, conf.scaler, conf.selected_features)
 
         features, labels = pd.concat([ds[0], ds[2]], axis="rows"), pd.concat([ds[1], ds[3]], axis="rows")
         features.to_pickle("serialized_df/features_{}".format(variant))
@@ -241,15 +230,24 @@ class MachineLearningProcedure:
         labels[:200].to_pickle("serialized_df/labels_{}_short".format(variant))
 
     @staticmethod
-    def format_data_exp_output(conf_perf):
-        """ format of conf_perf : [[(m1, m2), (p1, p2, p3), (perf1, perf2)], [...]] """
-        for models, conf, perf in conf_perf:
-            print("imp_num={}, imp_obj={}, knn={}(#rem.:{}), numerizer={}, scaler={}, feat_select={}(#corr_rem.:{}/#select:{})".format(
-                conf[0], conf[1], conf[2], conf[3], conf[4], conf[5], conf[6], conf[7][0], conf[7][1]))
-            if len(perf) == 1:
-                print("\t-> score: {}".format(round(perf, 5)))
+    def format_data_exp_output(preproc_candidates):
+        """ :param preproc_candidates: list of lists of PreprocCandidates (all candidates of different
+        configurations) """
+
+        for pc in preproc_candidates:
+            print(pc[0])
+            if len(pc) == 1:
+                print("\t-> score: {}".format(round(pc[0].auc, 5)))
             else:
-                print("\t-> avg: {}, stdev: {}".format(round(statistics.mean(perf), 5), round(statistics.stdev(perf), 5)))
+                aucs = [pc.auc for pc in pc]
+                outliers_removed = "outliers_removed: {}/{}".format(min(pc, key=attrgetter('out_detect_res')).out_detect_res,
+                                                                    max(pc, key=attrgetter('out_detect_res')).out_detect_res)
+                corr_features_removed = "corr_features_removed: {}/{}".format(min(pc, key=attrgetter('corr_features_out')).corr_features_out,
+                                                                              max(pc, key=attrgetter('corr_features_out')).corr_features_out)
+                n_features_final = "final_#_features {}/{}".format(len(min(pc, key=lambda x: len(x.selected_features)).selected_features),
+                                                                   len(max(pc, key=lambda x: len(x.selected_features)).selected_features))
+                print("\t-> avg: {}, stdev: {}".format(round(statistics.mean(aucs), 5), round(statistics.stdev(aucs), 5)),
+                      outliers_removed, corr_features_removed, n_features_final, sep=", ")
 
     # MODEL IDENTIFICATION
 
@@ -285,10 +283,9 @@ class MachineLearningProcedure:
         MachineLearningProcedure.format_model_exp_output(variant, candidates)
 
         self.final_models[variant] = candidates[0][0].model
-        print(candidates[0][0])
 
         if self.store:
-            pickle.dump(self.final_models[variant], open(MODELS_SAVE + "_" + variant, "wb"))
+            pickle.dump(self.final_models[variant], open(MODELS_SAVE.format(variant), "wb"))
 
     @staticmethod
     def format_model_exp_output(variant, candidates_lists):
@@ -297,8 +294,8 @@ class MachineLearningProcedure:
         for l in candidates_lists:
             tmp_auc = [c.auc for c in l]
             print("model: {}".format(str(l[0].model)))
-            print("\tPerformance (AUC) -> avg: {}, stdev: {}".format(round(statistics.mean(tmp_auc), 5),
-                                                                   round(statistics.stdev(tmp_auc), 5)))
+            print("\tPerformance (AUC) -> avg: {}, stdev: {}, min: {}, max: {}".format(
+                round(statistics.mean(tmp_auc), 5), round(statistics.stdev(tmp_auc), 5), round(min(tmp_auc), 5), round(max(tmp_auc), 5)))
 
     # MODEL EXPLOITATION
 
@@ -319,9 +316,8 @@ class MachineLearningProcedure:
             # Pre-process challenge data
             dp = DataPreprocessing()
             resp_id, features = dp.challenge_preprocessing_pipeline("data/test_set_features.csv",
-                                                                    conf["imp_num"], conf["imp_obj"], conf["out_detect"],
-                                                                    conf["numerizer"], conf["scaler"],
-                                                                    conf["selected_features"])
+                                                                    conf.imp_num, conf.imp_obj, conf.out_detect,
+                                                                    conf.numerizer, conf.scaler, conf.selected_features)
 
             # Use previously trained model on processed challenge data
             out["id"] = resp_id
@@ -332,3 +328,5 @@ class MachineLearningProcedure:
             "h1n1_vaccine": out["h1n1"],
             "seasonal_vaccine": out["seas"]
         }).to_csv("data/submission.csv", index=False)
+
+        print("\n * Model exploitation complete")

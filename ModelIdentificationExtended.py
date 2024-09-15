@@ -8,10 +8,10 @@ from sklearn.linear_model._base import LinearModel
 from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
 
-from ModelIdentification import ModelIdentification, Candidate
+from ModelIdentification import ModelIdentification, ModelCandidate
 
 
-class SpecificCandidate(Candidate):
+class SpecificCandidate(ModelCandidate):
     def __init__(self, model, auc, pars, is_reg_model, is_bag=False, estimator_tag=None):
         super().__init__(model, auc, pars, is_reg_model)
         self.is_bag = is_bag  # if the method uses an estimator (other than itself)
