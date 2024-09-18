@@ -1,197 +1,183 @@
-import statistics
+import pickle
 
 import pandas as pd
-from scipy.special import expit
-from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier, \
-    BaggingClassifier
-from sklearn.linear_model import LinearRegression, RidgeClassifier, LogisticRegression
-from sklearn.metrics import roc_auc_score
+from sklearn.ensemble import BaggingClassifier, GradientBoostingClassifier, HistGradientBoostingClassifier, \
+    AdaBoostClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model._base import LinearModel
 from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
 
-
-class ModelCandidate:
-    def __init__(self, model, auc, pars, is_reg_model):
-        self.model = model
-        self.auc: float = auc
-        self.pars: str = pars
-        self.is_reg_model: bool = is_reg_model
-
-    def __repr__(self):
-        return "{} ({}): {}".format(str(type(self.model)).split('.')[-1].split("'")[0], self.pars, self.auc)
+from ModelBase import ModelBase, ModelCandidate
 
 
-class ModelIdentification:
+class SpecificCandidate(ModelCandidate):
+    def __init__(self, model, auc, pars, is_reg_model, is_bag=False, estimator_tag=None):
+        super().__init__(model, auc, pars, is_reg_model)
+        self.is_bag = is_bag  # if the method uses an estimator (other than itself)
+        self.estimator_tag = estimator_tag
+
+
+class ModelIdentification(ModelBase):
+    """
+        Model identification phase, test models with different hyperparameters and perform additional experiments
+        (in/out-sample overfitting evaluation...)
+    """
     def __init__(self, train_features: pd.DataFrame, train_labels: pd.DataFrame, test_features: pd.DataFrame,
-                 test_labels: pd.DataFrame, cv_folds: int, verbose=False):
-        self.train_features = train_features
-        self.train_labels = train_labels
+                 test_labels: pd.DataFrame, cv_folds: int, verbose: bool = False):
+        super().__init__(train_features, train_labels, test_features, test_labels, cv_folds, verbose)
 
-        self.test_features = test_features
-        self.test_labels = test_labels
+    def gbc(self, par="n_estimators"):
+        """ :param par: possible values: n_estimators, subsample, min_sample_split, max_depth """
+        if par == "n_estimators":
+            for n in [50, 100, 200, 300, 400, 500]:
+                gbc = GradientBoostingClassifier(loss="log_loss", n_estimators=n)
+                auc = self.parametric_identification_cv(gbc, False)
+                self.candidates.append(SpecificCandidate(gbc, auc, "n_estimators={}".format(n), False, True))
 
-        self.cv_folds = max(cv_folds, 2)
-        self.candidates: list[ModelCandidate] = list()
-        self.verbose = verbose
+        elif par == "subsample":
+            for s in [0.1, 0.5, 0.75, 0.9, 1.0]:
+                gbc = GradientBoostingClassifier(loss="log_loss", subsample=s)
+                auc = self.parametric_identification_cv(gbc, False)
+                self.candidates.append(SpecificCandidate(gbc, auc, "subsample={}".format(s), False, False))
 
-    @staticmethod
-    def model_exploitation(model, test_features: pd.DataFrame):
-        """
-            Use final model to predict challenge data
-        """
+        elif par == "min_sample_split":
+            for mss in [2, 3, 5, 10]:
+                gbc = GradientBoostingClassifier(loss="log_loss", min_samples_split=mss)
+                auc = self.parametric_identification_cv(gbc, False)
+                self.candidates.append(SpecificCandidate(gbc, auc, "min_sample_split={}".format(mss), False, False))
 
-        is_reg_model = type(model) is LinearRegression or type(model) is RidgeClassifier
-        return expit(model.predict(test_features)) if is_reg_model else model.predict_proba(test_features)[:, 1]
+        elif par == "max_depth":
+            for max_depth in [2, 3, 4, 5, 10, 20]:
+                gbc = GradientBoostingClassifier(loss="log_loss", max_depth=max_depth)
+                auc = self.parametric_identification_cv(gbc, False)
+                self.candidates.append(SpecificCandidate(gbc, auc, "max_depth={}".format(max_depth), False, False))
 
-    def model_testing(self):
-        """ Train selected candidates on complete training set and assess performance on unused test set. """
+    def hgb(self, par="max_iter"):
+        if par == "max_iter":
+            for mxi in [50, 100, 500, 1000, 5000, 10**4, 10**5, 10**6]:
+                hgb = HistGradientBoostingClassifier(loss="log_loss", max_iter=mxi)
+                auc = self.parametric_identification_cv(hgb, False)
+                self.candidates.append(SpecificCandidate(hgb, auc, "max_iter={}".format(mxi), False, False))
 
-        for i in range(len(self.candidates)):
-            m = self.candidates[i].model
-            m.fit(self.train_features, self.train_labels)
-            y_i_ts_pred_prob = expit(m.predict(self.test_features)) if self.candidates[i].is_reg_model else m.predict_proba(self.test_features)[:, 1]
-            auc = roc_auc_score(self.test_labels, y_i_ts_pred_prob)
-            self.candidates[i].model, self.candidates[i].auc = m, auc
-        self.candidates.sort(reverse=True, key=lambda x: x.auc)
+        elif par == "l2":
+            for l2 in [0.0, 0.05, 0.1, 0.3, 0.5, 1.0, 5.0]:
+                hgb = HistGradientBoostingClassifier(loss="log_loss", l2_regularization=l2)
+                auc = self.parametric_identification_cv(hgb, False)
+                self.candidates.append(SpecificCandidate(hgb, auc, "l2_reg={}".format(l2), False, False))
 
-        # print results of testing of most promising models
-        if self.verbose:
-            print("\n * MODEL TESTING *")
-            print(" -> performance:")
-            for c in self.candidates:
-                ModelIdentification.display_training_result(c)
+        elif par == "min_samples_leaf":
+            for msl in [10, 20, 30, 40, 50]:
+                hgb = HistGradientBoostingClassifier(loss="log_loss", min_samples_leaf=msl)
+                auc = self.parametric_identification_cv(hgb, False)
+                self.candidates.append(SpecificCandidate(hgb, auc, "min_sample_leaf={}".format(msl), False, False))
 
-        return self.candidates
+        elif par == "max_features":
+            for mf in [0.5, 0.75, 0.9, 1.0]:
+                hgb = HistGradientBoostingClassifier(loss="log_loss", max_features=mf)
+                auc = self.parametric_identification_cv(hgb, False)
+                self.candidates.append(SpecificCandidate(hgb, auc, "max_features={}".format(mf), False, False))
 
-    def model_selection(self, n=10):
-        """ Select most promising models based on performance on validation sets. """
+    def nn(self, par="hl1"):
+        if par == "hl1":
+            for hl in [(50,), (100,), (200,), (500,)]:
+                nn = MLPClassifier(hidden_layer_sizes=hl, activation="logistic")
+                auc = self.parametric_identification_cv(nn, False)
+                self.candidates.append(SpecificCandidate(nn, auc, "hidden_layers={}".format(hl[0]), False, False))
 
-        # Keep max n best models
-        self.candidates = sorted(self.candidates, reverse=True, key=lambda x: statistics.mean(x.auc))[:min(n, len(self.candidates))]
+        elif par == "hl2":
+            for hls in [(50, 50), (100, 100)]:
+                nn = MLPClassifier(hidden_layer_sizes=hls, activation="logistic")
+                auc = self.parametric_identification_cv(nn, False)
+                self.candidates.append(SpecificCandidate(nn, auc, "hidden_layers={}".format(hls), False, False))
 
-    def parametric_identification_cv(self, model, is_reg_model=False):
-        """
-            Generic loop training the provided model on the training set (split in training/validation
-            folds) and assessing performance.
+        elif par == "act_f":
+            for actf in ['logistic', 'tanh', 'relu']:
+                nn = MLPClassifier(hidden_layer_sizes=(50,), activation=actf)
+                auc = self.parametric_identification_cv(nn, False)
+                self.candidates.append(SpecificCandidate(nn, auc, "act_f={}".format(actf), False, False))
 
-            :return: AUC of the models of the different loops
-        """
+        elif par == "solver":
+            for solver in ['lbfgs', 'sgd', 'adam']:
+                nn = MLPClassifier(hidden_layer_sizes=(50,), activation="logistic", solver=solver)
+                auc = self.parametric_identification_cv(nn, False)
+                self.candidates.append(SpecificCandidate(nn, auc, "solver={}".format(solver), False, False))
 
-        n_rows_fold = len(self.train_features) // self.cv_folds
-        auc = list()
+        elif par == "miter":
+            for miter in [100, 200, 300, 400, 500]:
+                nn = MLPClassifier(hidden_layer_sizes=(100,), activation="logistic", solver="sgd", max_iter=miter)
+                auc = self.parametric_identification_cv(nn, False)
+                self.candidates.append(SpecificCandidate(nn, auc, "max_iter={}".format(miter), False, False))
 
-        for i in range(self.cv_folds):
-            X_i = self.train_features[self.train_features.columns.to_list()[:]]
-            X_i_tr = pd.concat([X_i.iloc[: n_rows_fold * i], X_i.iloc[n_rows_fold * (i + 1):]], axis=0,
-                               ignore_index=True)
-            X_i_vs = X_i.iloc[n_rows_fold * i: n_rows_fold * (i + 1)]
-
-            y_i = self.train_labels
-            y_i_tr = pd.concat([y_i.iloc[: n_rows_fold * i], y_i.iloc[n_rows_fold * (i + 1):]], axis=0,
-                               ignore_index=True)
-            y_i_vs = y_i.iloc[n_rows_fold * i: n_rows_fold * (i + 1)].astype(float)
-
-            # train + predict probabilities
-            model.fit(X_i_tr, y_i_tr)
-            y_i_pred_prob = expit(model.predict(X_i_vs)) if is_reg_model else model.predict_proba(X_i_vs)[:, 1]
-
-            # compute AUC
-            auc.append(roc_auc_score(y_i_vs, y_i_pred_prob))
-
-        return auc
-
-    def preprocessing_model_identification(self, model):
-        """ For preprocessing experiments, don't compute parametric identification loop (suppose we already know the
-         parameters we want) """
-
-        m, pars = {"lm": (LinearRegression(), str()),
-                   "lr": (LogisticRegression(max_iter=10000), str()),
-                   "gbc": (GradientBoostingClassifier(loss="log_loss", n_estimators=250,
-                                                      subsample=0.75, min_samples_split=2, max_depth=3), "s=0.75"),
-                   "bc": (BaggingClassifier(estimator=GradientBoostingClassifier(loss="log_loss", n_estimators=200, subsample=0.75, min_samples_split=2, max_depth=3), n_estimators=10),
-                          "estimators={}".format("GBC"))}[model]
-        self.candidates.append(ModelCandidate(m, float(), pars, type(m) is LinearRegression))
-
-    # Methods corresponding to the "structural identification" step for the different model types
-
-    def model_identification(self, models):
-        for m in models:
-            {"lm": self.lm, "lr": self.lr, "ridge": self.ridge, "tree": self.tree, "forest": self.forest,
-             "ada": self.ada, "gbc": self.gbc, "bc": self.bc, "nn": self.nn}[m]()
-
-        # print results of model identification operations
-        if self.verbose:
-            print("\n  * MODEL IDENTIFICATION *")
-            print(" -> CV performance:")
-            for c in sorted(self.candidates, reverse=True, key=lambda x: statistics.mean(x.auc)):
-                ModelIdentification.display_training_result(c)
-
-    def lm(self):
-        # Structural and parametric identification
-        lm = LinearRegression()
-        auc = self.parametric_identification_cv(lm, True)
-        self.candidates.append(ModelCandidate(lm, auc, str(), True))
-
-    def lr(self):
-        lr = LogisticRegression(max_iter=100000)
-        auc = self.parametric_identification_cv(lr, False)
-        self.candidates.append(ModelCandidate(lr, auc, str(), False))
-
-    def ridge(self):
-        for alpha in [0.1, 0.5, 1.0, 5.0, 10.0, 20.0]:
-            ridge = RidgeClassifier(alpha=alpha)
-            auc = self.parametric_identification_cv(ridge, True)
-            self.candidates.append(ModelCandidate(ridge, auc, "alpha={}".format(alpha), True))
-
-    def tree(self):
-        for c in ["entropy", "gini", "log_loss"]:
-            for s in ["best", "random"]:
-                dtree = DecisionTreeClassifier(criterion=c, splitter=s)
-                auc = self.parametric_identification_cv(dtree, False)
-                self.candidates.append(ModelCandidate(dtree, auc, "c={}, s={}".format(c, s), False))
-
-    def forest(self):
-        for c in ["entropy", "gini", "log_loss"]:
-            for n in [10, 20, 50, 100]:
-                rf = RandomForestClassifier(criterion=c, n_estimators=n)
-                auc = self.parametric_identification_cv(rf, False)
-                self.candidates.append(ModelCandidate(rf, auc, "(c={}, n={})".format(c, n), False))
-
-    def ada(self):
-        for n in (300, 400, 500):
-            ada = AdaBoostClassifier(estimator=None, n_estimators=n, algorithm="SAMME")
-            auc = self.parametric_identification_cv(ada, False)
-            self.candidates.append(ModelCandidate(ada, auc, "n={}".format(n), False))
-
-    def gbc(self):
-        for s in [0.75, 1.0]:
-            gbc = GradientBoostingClassifier(loss="log_loss", n_estimators=250, subsample=s,
-                                             min_samples_split=2, max_depth=3)
-            auc = self.parametric_identification_cv(gbc, False)
-            self.candidates.append(ModelCandidate(gbc, auc, "subsample:{}".format(s), False))
-
-    def bc(self):
-        estimator = GradientBoostingClassifier(loss="log_loss", n_estimators=200, subsample=0.75, min_samples_split=2, max_depth=3)
-        bc = BaggingClassifier(estimator=estimator, n_estimators=10)
-        auc = self.parametric_identification_cv(bc, False)
-        self.candidates.append(ModelCandidate(bc, auc, "estimators={}".format("GBC"), False))
-
-    def nn(self):
-        nn = MLPClassifier(hidden_layer_sizes=[100], activation="logistic", solver="sgd", max_iter=300)
+    def nn_short(self, par=None):
+        nn = MLPClassifier(hidden_layer_sizes=(50,), activation="logistic", solver="sgd", max_iter=100)
         auc = self.parametric_identification_cv(nn, False)
-        self.candidates.append(ModelCandidate(nn, auc, "act_f={}".format("logistic"), False))
+        self.candidates.append(SpecificCandidate(nn, auc, "nn_short_test={}".format(50), False, False))
 
-        # best configuration: try an ensemble model (?)
+    def nn_long(self):
+        nn = MLPClassifier(hidden_layer_sizes=(500,), activation="logistic", solver="sgd", learning_rate="adaptive",
+                           max_iter=1000, early_stopping=True)
+        auc = self.parametric_identification_cv(nn, False)
+        self.candidates.append(SpecificCandidate(nn, auc, "nn_full_stuff={}".format((500,)), False, False))
 
-    # Display results
+    # Ensemble of estimators
 
-    @staticmethod
-    def display_training_result(candidate):
-        if type(candidate.auc) is list:
-            print("{} ({})".format(str(type(candidate.model)).split('.')[-1][:-2], candidate.pars))
-            msg = "avg candidate.auc: {}, stddev candidate.auc: {}, max candidate.auc {}, min candidate.auc: {}"
-            print(msg.format(round(statistics.mean(candidate.auc), 5), round(statistics.stdev(candidate.auc), 5),
-                             round(max(candidate.auc), 5), round(min(candidate.auc), 5)))
-        else:
-            print("{} ({})".format(str(type(candidate.model)).split('.')[-1][:-2], candidate.pars))
-            print("candidate.auc: {}".format(round(candidate.auc, 5)))
+    def ada(self, par="_uni"):
+        if "_uni" in par:
+            estimators, names = [None, DecisionTreeClassifier(criterion="log_loss", splitter="best"),
+                                 DecisionTreeClassifier(criterion="log_loss", splitter="random"),
+                                 LogisticRegression(max_iter=100000)][:1], ['None', 'DTC-best', 'DTC-random', 'LR']
+        else:  # "_ens" in par
+            estimators, names = [GradientBoostingClassifier(loss="log_loss", n_estimators=200, subsample=0.75,
+                                 min_samples_split=2, max_depth=3)], ['GBC']
+
+        for e, n in zip(estimators, names):
+            if par == "n_estimators_uni":
+                for ne in [100, 200, 300, 500][2:]:
+                    ada = AdaBoostClassifier(estimator=e, n_estimators=ne, algorithm="SAMME")
+                    auc = self.parametric_identification_cv(ada, False)
+                    self.candidates.append(SpecificCandidate(ada, auc, "n_estimators={}".format(ne), False, True, n))
+
+            elif par == "n_estimators_ens":
+                for ne in [10, 15, 20]:
+                    ada = AdaBoostClassifier(estimator=e, n_estimators=ne, algorithm="SAMME")
+                    auc = self.parametric_identification_cv(ada, False)
+                    self.candidates.append(SpecificCandidate(ada, auc, "n_estimators={}".format(ne), False, True, n))
+
+    def bc(self, par="_uni"):
+        if "_uni" in par:
+            estimators, names = [None, DecisionTreeClassifier(criterion="log_loss", splitter="best"),
+                                 DecisionTreeClassifier(criterion="log_loss", splitter="random"),
+                                 LogisticRegression(max_iter=100000)], ['None', 'DTC-best', 'DTC-random', 'LR']
+        else:  # "_ens" in par
+            estimators, names = [GradientBoostingClassifier(loss="log_loss", n_estimators=200, subsample=0.75,
+                                 min_samples_split=2, max_depth=3)], ['GBC']
+
+        for e, n in zip(estimators, names):
+            if "max_features" in par:
+                for mf in [0.5, 0.75, 1.0]:
+                    bc = BaggingClassifier(estimator=e, max_features=mf)
+                    auc = self.parametric_identification_cv(bc, False)
+                    self.candidates.append(SpecificCandidate(bc, auc, "max_features={}".format(mf), False, True, n))
+
+            elif par == "n_estimators_uni":
+                for ne in [10, 20, 50, 100, 200]:
+                    bc = BaggingClassifier(estimator=e, n_estimators=ne)
+                    auc = self.parametric_identification_cv(bc, False)
+                    self.candidates.append(SpecificCandidate(bc, auc, "n_estimators={}".format(ne), False, True, n))
+
+            elif par == "n_estimators_ens":
+                for ne in [10, 15, 20]:
+                    bc = BaggingClassifier(estimator=e, n_estimators=ne)
+                    auc = self.parametric_identification_cv(bc, False)
+                    self.candidates.append(SpecificCandidate(bc, auc, "n_estimators={}".format(ne), False, True, n))
+
+    def bc_long(self, par):
+        # par = h1n1/seas
+        e = GradientBoostingClassifier(loss="log_loss", n_estimators=200, subsample=0.75, min_samples_split=2, max_depth=3)
+        ne = 45
+        bc = BaggingClassifier(estimator=e, n_estimators=ne)
+        auc = self.parametric_identification_cv(bc, False)
+        self.candidates.append(SpecificCandidate(bc, auc, "n_estimators={}".format(ne), False, True, "GBC"))
+
+        pickle.dump(bc, open("bc_long_save_{}".format(par), "wb"))
