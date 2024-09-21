@@ -5,7 +5,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 
 from DataPreprocessing import DataPreprocessing
-from ModelIdentificationExtended import ModelIdentificationExtended, SpecificCandidate
+from ModelIdentification import ModelIdentification
 
 
 class MLProcedureExtended:
@@ -46,7 +46,7 @@ class MLProcedureExtended:
             train_features, train_labels, test_features, test_labels = dp.get_train_test_datasets()
 
             # Train models with CV and test performance on unused test set
-            mi = ModelIdentificationExtended(train_features, train_labels, test_features, test_labels, cv_folds=5, verbose=True)
+            mi = ModelIdentification(train_features, train_labels, test_features, test_labels, cv_folds=5, verbose=True)
             mods_dict = {"nns": mi.nn_short, "nnl": mi.nn_long, "nn": mi.nn, "ada": mi.ada, "gbc": mi.gbc, "hgb": mi.hgb, "bc": mi.bc, "bcl": mi.bc_long}
             mods_dict[model]() if par is None else mods_dict[model](par)
             mi.model_selection(n=1000)

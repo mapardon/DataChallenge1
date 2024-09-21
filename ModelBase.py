@@ -1,17 +1,19 @@
 from abc import ABC
 
 import pandas as pd
+from scipy.special import expit
+from sklearn.metrics import roc_auc_score
 
 
-class ModelCandidate:
-    def __init__(self, model, auc, pars, is_reg_model):
+class ExperimentResult:
+    def __init__(self, model_tag, model, par_tag, par_value, is_reg_model, is_bag=False, estimator_tag=None):
+        self.model_tag: str = model_tag
         self.model = model
-        self.auc: float = auc
-        self.pars: str = pars
+        self.par_tag: str = par_tag
+        self.par_value: str | float | int | None = par_value
         self.is_reg_model: bool = is_reg_model
-
-    def __repr__(self):
-        return "{} ({}): {}".format(str(type(self.model)).split('.')[-1].split("'")[0], self.pars, self.auc)
+        self.is_bag: bool = is_bag  # if the method uses an estimator (other than itself)
+        self.estimator_tag: str | None = estimator_tag
 
 
 class ModelBase(ABC):
@@ -27,7 +29,6 @@ class ModelBase(ABC):
         self.test_labels = test_labels
 
         self.cv_folds = max(cv_folds, 2)
-        self.candidates: list[ModelCandidate] = list()
         self.verbose = verbose
 
     def parametric_identification_cv(self, model, is_reg_model=False):

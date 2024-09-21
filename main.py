@@ -17,8 +17,11 @@ def multi_proc():
 
 def uni_proc():
     # steps: pre, mi, exp
-    MachineLearningProcedure(5, variants=("h1n1", "seas"), steps=("pre", "mi", "exp"), store=True,
-                             dp_model_tag="lr", mi_models=("lm", "lr",), short_ds=True).main()
+    mi_pars = (("gbc", "n_estimators"),
+               ("gbc", "min_sample_split"),
+               ("nn", "hl1"),)
+    MachineLearningProcedure(2, variants=("h1n1",), steps=("mi",), store=False,
+                             dp_model_tag="lr", mi_pars=mi_pars, ms_models=("lm",), short_ds=True).main()
 
 
 if __name__ == '__main__':

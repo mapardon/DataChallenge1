@@ -5,9 +5,11 @@ from multiprocessing import Process
 from operator import attrgetter
 
 import pandas as pd
+from matplotlib import pyplot as plt
 
 from DataPreprocessing import DataPreprocessing
-from ModelIdentification import ModelIdentification
+from ModelIdentification import ModelIdentification, ExperimentResultMi
+from ModelSelection import ModelSelection
 
 PREPROC_SAVE = "preproc_config_save_{}"
 MODELS_SAVE = "models_trained_save_{}"
@@ -41,14 +43,15 @@ class MachineLearningProcedure:
     """
 
     def __init__(self, exp_rounds=5, variants=("h1n1", "flu"), steps=("pre", "id", "exp"), store=False,
-                 dp_model_tag="lm", mi_models=("lm",), short_ds=False):
+                 dp_model_tag="lm", mi_pars=(("gbc", "*"),), ms_models=("lm",), short_ds=False):
         """
         :param exp_rounds: How many times the whole procedure must be run
         :param variants: Which variant to treat in the procedure
         :param steps: Procedure steps to be executed (can be executed independently due to storage of processed data)
         :param store: Store results (preprocessed data and experiments results)
         :param dp_model_tag: Short name to indicate which model to use for preprocessing experiments
-        :param mi_models: Models to analyze for model identification phase
+        :param mi_pars: Parameters for model identification experiments
+        :param ms_models: Models to analyze for model identification phase
         :param short_ds: Consider short version of the dataset (debug purpose)
         """
 
@@ -56,13 +59,19 @@ class MachineLearningProcedure:
         self.variants = variants
         self.steps = steps
         self.store = store
-        self.dp_model_tag = dp_model_tag
-        self.mi_models = mi_models
         self.short_ds = short_ds
 
+        # preproc
+        self.dp_model_tag = dp_model_tag
         self.preproc_features = None
         self.preproc_labels = None
         self.final_confs = {"h1n1": PreprocCandidate(), "seas": PreprocCandidate()}
+
+        # model identification
+        self.mi_pars = mi_pars
+
+        # model selection
+        self.ms_models = ms_models
         self.final_models = {"h1n1": None, "seas": None}
 
     def main(self):
@@ -70,6 +79,13 @@ class MachineLearningProcedure:
         if "pre" in self.steps:
             for variant in self.variants:
                 procs.append(Process(target=self.preprocessing, args=(variant,)))
+            for p in procs: p.start()
+            for p in procs: p.join()
+
+        procs = list()
+        if "ms" in self.steps:
+            for variant in self.variants:
+                procs.append(Process(target=self.model_selection, args=(variant,)))
             for p in procs: p.start()
             for p in procs: p.join()
 
@@ -207,7 +223,7 @@ class MachineLearningProcedure:
         pc.corr_features_out, _, pc.selected_features = dp.get_feature_selection_res()
 
         # Model identification and validation
-        mi = ModelIdentification(*ds, cv_folds=5, verbose=False)
+        mi = ModelSelection(*ds, cv_folds=5, verbose=False)
         mi.preprocessing_model_identification(self.dp_model_tag)
         candidates = mi.model_testing()  # 1 single candidate is returned
 
@@ -249,9 +265,9 @@ class MachineLearningProcedure:
                 print("\t-> avg: {}, stdev: {}".format(round(statistics.mean(aucs), 5), round(statistics.stdev(aucs), 5)),
                       outliers_removed, corr_features_removed, n_features_final, sep=", ")
 
-    # MODEL IDENTIFICATION
+    # MODEL SELECTION
 
-    def model_identification(self, variant):
+    def model_selection(self, variant):
         """
             Using the datasets pre-processed with the previously chosen configuration, we now test the performance of
             different learning algorithms
@@ -270,8 +286,8 @@ class MachineLearningProcedure:
             train_features, train_labels, test_features, test_labels = dp.get_train_test_datasets()
 
             # Train models with CV and test performance on unused test set
-            for m in self.mi_models:
-                mi = ModelIdentification(train_features, train_labels, test_features, test_labels, cv_folds=10, verbose=True)
+            for m in self.ms_models:
+                mi = ModelSelection(train_features, train_labels, test_features, test_labels, cv_folds=10, verbose=True)
                 mi.model_identification((m,))
                 mi.model_selection()
                 candidates += mi.model_testing()
@@ -297,6 +313,88 @@ class MachineLearningProcedure:
             print("\tPerformance (AUC) -> avg: {}, stdev: {}, min: {}, max: {}".format(
                 round(statistics.mean(tmp_auc), 5), round(statistics.stdev(tmp_auc), 5), round(min(tmp_auc), 5), round(max(tmp_auc), 5)))
 
+    # MODEL IDENTIFICATION
+
+    def model_identification(self, variant):
+        f1, f2 = ("serialized_df/features_{}".format(variant) + "_short" * self.short_ds,
+                  "serialized_df/labels_{}".format(variant) + "_short" * self.short_ds)
+
+        res = dict()
+        for i in range(self.exp_rounds):
+            # Load & reshuffle preprocessed dataset
+            # TODO: optimize to avoid reloading each round
+            features, labels = pd.read_pickle(f1), pd.read_pickle(f2)
+            dp = DataPreprocessing(self.short_ds)
+            dp.shuffle_datasets(features, pd.DataFrame(labels))
+            train_features, train_labels, test_features, test_labels = dp.get_train_test_datasets()
+
+            # Train models with CV and test performance on unused test set
+            for model, par in self.mi_pars:
+                mi = ModelIdentification(train_features, train_labels, test_features, test_labels, cv_folds=5, verbose=True)
+                if model in res:
+                    if par in res[model]:
+                        res[model][par] += mi.model_identification(model, par)
+                    else:
+                        res[model][par] = mi.model_identification(model, par)
+                else:
+                    res[model] = dict()
+                    res[model][par] = mi.model_identification(model, par)
+
+        # split results by parameter value (easier manipulation to plot results)
+        res2 = dict()
+        for m in res:
+            res2[m] = dict()
+            for par in res[m]:
+                res2[m][par] = dict()
+                vals = set([r.par_value for r in res[m][par]])
+                for v in vals:
+                    res2[m][par][v] = list()
+                    for r in res[m][par]:
+                        if r.par_value == v:
+                            res2[m][par][v].append(r)
+        res = res2
+
+        # print all candidates
+        print("\n{} Model identification results".format(variant))
+        for m in res:
+            for par in res[m]:
+                print("\n * Experiment: {} - {}".format(m, par))
+                tmp_res = sorted(res[m][par].items(), reverse=True, key=lambda x: statistics.mean([statistics.mean(r.mi_auc) for r in x[1]]))
+                for par_val, results in tmp_res:
+                    tmp_auc = [statistics.mean(r.mi_auc) for r in results]
+                    print("model: {} {}={}".format(m, par, par_val))
+                    print("\tPerformance (AUC) -> avg: {}, stdev: {}, min: {}, max: {}".format(
+                        round(statistics.mean(tmp_auc), 5), round(statistics.stdev(tmp_auc), 5), round(min(tmp_auc), 5),
+                        round(max(tmp_auc), 5)))
+
+        for m in res:
+            for p in res[m]:
+                self.plot_results(res[m][p], variant)
+
+    def plot_results(self, results: dict, variant: str):
+
+        ex = list(results.items())[0][1][0]
+        plot = "plot" if floatable(ex.par_value) else "hist"
+        results = sorted(results.items(), key=lambda x: x[0])
+        x, y = list(), list()
+        for par, res in results:
+            x.append(par)
+            y.append(statistics.mean([statistics.mean(r.mi_auc) for r in res]))
+        fig, ax = plt.subplots()
+
+        if plot == "hist":
+            ax.bar(x, y)
+        elif plot == "plot":
+            ax.plot(x, y)
+
+        title = 'Experiment: {}, {}{}, {}'.format(variant, ex.model_tag, " ({})".format(ex.estimator_tag) if ex.is_bag else str(), ex.par_tag)
+        ax.set(xlabel=ex.par_tag, ylabel='AUC', title=title)
+        ax.grid()
+        if self.store:
+            plt.savefig("figures/{}-{}{}-{}.png".format(variant, ex.model_tag, '-' + ex.estimator_tag if ex.is_bag else str(), ex.par_tag))
+        else:
+            plt.show()
+
     # MODEL EXPLOITATION
 
     def model_exploitation(self):
@@ -321,7 +419,7 @@ class MachineLearningProcedure:
 
             # Use previously trained model on processed challenge data
             out["id"] = resp_id
-            out[variant] = ModelIdentification.model_exploitation(model, features)
+            out[variant] = ModelSelection.model_exploitation(model, features)
 
         pd.DataFrame({
             "respondent_id": out["id"],
@@ -330,3 +428,14 @@ class MachineLearningProcedure:
         }).to_csv("data/submission.csv", index=False)
 
         print("\n * Model exploitation complete")
+
+    # UTILS #
+
+
+def floatable(f):
+    is_float = True
+    try:
+        float(f)
+    except ValueError:
+        is_float = False
+    return is_float

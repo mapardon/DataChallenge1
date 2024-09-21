@@ -89,6 +89,8 @@ class DataPreprocessing:
         """ Manage featureless challenge dataset """
         return self.resp_id, self.features
 
+    # TODO load if str or df
+
     def load_datasets(self, features_src, labels_src):
         features = pd.read_csv(features_src)
         labels = pd.read_csv(labels_src)
