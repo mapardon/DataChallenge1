@@ -20,8 +20,8 @@ def uni_proc():
     mi_pars = (("gbc", "n_estimators"),
                ("gbc", "min_sample_split"),
                ("nn", "hl1"),)
-    MachineLearningProcedure(2, variants=("h1n1",), steps=("mi",), store=False,
-                             dp_model_tag="lr", mi_pars=mi_pars, ms_models=("lm",), short_ds=True).main()
+    MachineLearningProcedure(2, variants=("h1n1", "seas",), steps=("ms", "exp",), store=True,
+                             dp_model_tag="lr", mi_pars=mi_pars, ms_models=("lm", "lr", "nn",), short_ds=True).main()
 
 
 if __name__ == '__main__':

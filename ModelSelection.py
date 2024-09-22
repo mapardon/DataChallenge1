@@ -64,10 +64,7 @@ class ModelSelection(ModelBase):
         """ Select most promising models based on performance on validation sets. """
 
         # Keep max n best models
-        try:
-            self.candidates = sorted(self.candidates, reverse=True, key=lambda x: statistics.mean(x.test_auc))[:min(n, len(self.candidates))]
-        except Exception as e:
-            print(e)
+        self.candidates = sorted(self.candidates, reverse=True, key=lambda x: statistics.mean(x.mi_auc))[:min(n, len(self.candidates))]
 
     def preprocessing_model_identification(self, model):
         """ For preprocessing experiments, don't compute parametric identification loop (suppose we already know the

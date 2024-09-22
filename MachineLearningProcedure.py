@@ -228,7 +228,7 @@ class MachineLearningProcedure:
         candidates = mi.model_testing()  # 1 single candidate is returned
 
         pc.dp_model = candidates[0].model
-        pc.auc = candidates[0].auc
+        pc.auc = candidates[0].test_auc
 
     @staticmethod
     def store_datasets(variant, conf):
@@ -286,19 +286,19 @@ class MachineLearningProcedure:
             train_features, train_labels, test_features, test_labels = dp.get_train_test_datasets()
 
             # Train models with CV and test performance on unused test set
+            ms = ModelSelection(train_features, train_labels, test_features, test_labels, cv_folds=10, verbose=True)
             for m in self.ms_models:
-                mi = ModelSelection(train_features, train_labels, test_features, test_labels, cv_folds=10, verbose=True)
-                mi.model_identification((m,))
-                mi.model_selection()
-                candidates += mi.model_testing()
+                ms.model_identification((m,))
+            ms.model_selection()
+            candidates += ms.model_testing()
 
         candidates = [list(g) for _, g in groupby(sorted(candidates, key=lambda x: str(x.model)), lambda x: str(x.model))]
-        candidates = sorted([sorted(l, reverse=True, key=lambda c: c.auc) for l in candidates], reverse=True, key=lambda x: statistics.mean(c.auc for c in x))
+        candidates = sorted([sorted(l, reverse=True, key=lambda c: c.test_auc) for l in candidates], reverse=True, key=lambda x: statistics.mean(c.test_auc for c in x))
 
         # Display results
         MachineLearningProcedure.format_model_exp_output(variant, candidates)
 
-        self.final_models[variant] = candidates[0][0].model
+        self.final_models[variant] = candidates[0][0]
 
         if self.store:
             pickle.dump(self.final_models[variant], open(MODELS_SAVE.format(variant), "wb"))
@@ -308,7 +308,7 @@ class MachineLearningProcedure:
         """ :param candidates_lists: list of lists of candidates (several experiments with the same estimator) """
         print("\n * Final {} candidates".format(variant))
         for l in candidates_lists:
-            tmp_auc = [c.auc for c in l]
+            tmp_auc = [c.test_auc for c in l]
             print("model: {}".format(str(l[0].model)))
             print("\tPerformance (AUC) -> avg: {}, stdev: {}, min: {}, max: {}".format(
                 round(statistics.mean(tmp_auc), 5), round(statistics.stdev(tmp_auc), 5), round(min(tmp_auc), 5), round(max(tmp_auc), 5)))
@@ -409,7 +409,7 @@ class MachineLearningProcedure:
 
         for variant in ["h1n1", "seas"]:
             conf = pickle.load(open("preproc_config_save_{}".format(variant), 'rb'))
-            model = pickle.load(open("models_trained_save_{}".format(variant), 'rb'))
+            model = pickle.load(open("models_trained_save_{}".format(variant), 'rb')).model
 
             # Pre-process challenge data
             dp = DataPreprocessing()
