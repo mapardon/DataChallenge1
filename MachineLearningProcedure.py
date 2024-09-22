@@ -8,7 +8,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 
 from DataPreprocessing import DataPreprocessing
-from ModelIdentification import ModelIdentification, ExperimentResultMi
+from ModelIdentification import ModelIdentification
 from ModelSelection import ModelSelection
 
 PREPROC_SAVE = "preproc_config_save_{}"
@@ -140,7 +140,7 @@ class MachineLearningProcedure:
                         imputation_res[(imp_num, imp_obj)] = [pc]
 
             # Outliers detection
-            for nn in [0, 2, 25]:
+            for nn in [0, 2, 25][:1]:
                 pc = PreprocCandidate(imp_num=default_imp_num, imp_obj=default_imp_obj, out_detect=nn, numerizer=default_numerizer, scaler=default_scaler, feat_selector=default_feat_select)
                 self.preprocessing_exp(pc)
 
@@ -196,6 +196,9 @@ class MachineLearningProcedure:
         # Store configuration having shown the highest performance average over experiments
         self.final_confs[variant] = max(imputation_res + outliers_res + scaling_res + feat_select_res + combination_res,
                                         key=lambda x: statistics.mean([c.auc for c in x]) if len(x) > 1 else x[0].auc)[0]
+
+        self.final_confs[variant].numerizer = "one-hot"
+        self.final_confs[variant].feat_selector = "RFE"
 
         print("\n * Final configuration")
         print(self.final_confs[variant], self.final_confs[variant].selected_features)
@@ -320,10 +323,9 @@ class MachineLearningProcedure:
                   "serialized_df/labels_{}".format(variant) + "_short" * self.short_ds)
 
         res = dict()
+        features, labels = pd.read_pickle(f1), pd.read_pickle(f2)
         for i in range(self.exp_rounds):
-            # Load & reshuffle preprocessed dataset
-            # TODO: optimize to avoid reloading each round
-            features, labels = pd.read_pickle(f1), pd.read_pickle(f2)
+            # Reshuffle preprocessed dataset
             dp = DataPreprocessing(self.short_ds)
             dp.shuffle_datasets(features, pd.DataFrame(labels))
             train_features, train_labels, test_features, test_labels = dp.get_train_test_datasets()

@@ -89,8 +89,6 @@ class DataPreprocessing:
         """ Manage featureless challenge dataset """
         return self.resp_id, self.features
 
-    # TODO load if str or df
-
     def load_datasets(self, features_src, labels_src):
         features = pd.read_csv(features_src)
         labels = pd.read_csv(labels_src)
@@ -281,7 +279,7 @@ class DataPreprocessing:
 
         elif feat_selector == "RFE":
             # fit estimator
-            selector = RFE(self.dp_model, n_features_to_select=0.5, step=1)
+            selector = RFE(self.dp_model, n_features_to_select=0.3, step=1)
             selector = selector.fit(self.features, self.labels)
 
             # keep best-ranked features
