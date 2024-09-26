@@ -8,8 +8,8 @@ import pandas as pd
 from matplotlib import pyplot as plt
 
 from DataPreprocessing import DataPreprocessing
-from ModelIdentification import ModelIdentification
-from ModelSelection import ModelSelection
+from ParametricIdentification import ParametricIdentification
+from StructuralIdentification import StructuralIdentification
 
 PREPROC_SAVE = "preproc_config_save_{}"
 MODELS_SAVE = "models_trained_save_{}"
@@ -43,15 +43,15 @@ class MachineLearningProcedure:
     """
 
     def __init__(self, exp_rounds=5, variants=("h1n1", "flu"), steps=("pre", "id", "exp"), store=False,
-                 dp_model_tag="lm", mi_pars=(("gbc", "*"),), ms_models=("lm",), short_ds=False):
+                 dp_model_tag="lm", pi_pars=(("gbc", "*"),), si_models=("lm",), short_ds=False):
         """
         :param exp_rounds: How many times the whole procedure must be run
         :param variants: Which variant to treat in the procedure
         :param steps: Procedure steps to be executed (can be executed independently due to storage of processed data)
         :param store: Store results (preprocessed data and experiments results)
         :param dp_model_tag: Short name to indicate which model to use for preprocessing experiments
-        :param mi_pars: Parameters for model identification experiments
-        :param ms_models: Models to analyze for model identification phase
+        :param pi_pars: Parameters for model identification experiments
+        :param si_models: Models to analyze for model identification phase
         :param short_ds: Consider short version of the dataset (debug purpose)
         """
 
@@ -68,10 +68,10 @@ class MachineLearningProcedure:
         self.final_confs = {"h1n1": PreprocCandidate(), "seas": PreprocCandidate()}
 
         # model identification
-        self.mi_pars = mi_pars
+        self.pi_pars = pi_pars
 
         # model selection
-        self.ms_models = ms_models
+        self.si_models = si_models
         self.final_models = {"h1n1": None, "seas": None}
 
     def main(self):
@@ -83,16 +83,16 @@ class MachineLearningProcedure:
             for p in procs: p.join()
 
         procs = list()
-        if "ms" in self.steps:
+        if "pi" in self.steps:
             for variant in self.variants:
-                procs.append(Process(target=self.model_selection, args=(variant,)))
+                procs.append(Process(target=self.parametric_identification, args=(variant,)))
             for p in procs: p.start()
             for p in procs: p.join()
 
         procs = list()
-        if "mi" in self.steps:
+        if "si" in self.steps:
             for variant in self.variants:
-                procs.append(Process(target=self.model_identification, args=(variant,)))
+                procs.append(Process(target=self.structural_identification, args=(variant,)))
             for p in procs: p.start()
             for p in procs: p.join()
 
@@ -226,9 +226,9 @@ class MachineLearningProcedure:
         pc.corr_features_out, _, pc.selected_features = dp.get_feature_selection_res()
 
         # Model identification and validation
-        mi = ModelSelection(*ds, cv_folds=5, verbose=False)
-        mi.preprocessing_model_identification(self.dp_model_tag)
-        candidates = mi.model_testing()  # 1 single candidate is returned
+        si = StructuralIdentification(*ds, cv_folds=5, verbose=False)
+        si.preprocessing_model_identification(self.dp_model_tag)
+        candidates = si.model_testing()  # 1 single candidate is returned
 
         pc.dp_model = candidates[0].model
         pc.auc = candidates[0].test_auc
@@ -238,7 +238,7 @@ class MachineLearningProcedure:
         """ Apply preprocessing operations (conf) on dataset and store it on disk to allow future fast loading of
         preprocessed dataset """
         ds = DataPreprocessing().training_preprocessing_pipeline("data/training_set_features.csv",
-                                                                 "data/training_set_labels.csv",
+                                                                 "data/training_set_labels_{}.csv".format(variant),
                                                                  conf.imp_num, conf.imp_obj, conf.out_detect,
                                                                  conf.numerizer, conf.scaler, conf.selected_features)
 
@@ -270,7 +270,7 @@ class MachineLearningProcedure:
 
     # MODEL SELECTION
 
-    def model_selection(self, variant):
+    def structural_identification(self, variant):
         """
             Using the datasets pre-processed with the previously chosen configuration, we now test the performance of
             different learning algorithms
@@ -289,11 +289,11 @@ class MachineLearningProcedure:
             train_features, train_labels, test_features, test_labels = dp.get_train_test_datasets()
 
             # Train models with CV and test performance on unused test set
-            ms = ModelSelection(train_features, train_labels, test_features, test_labels, cv_folds=10, verbose=True)
-            for m in self.ms_models:
-                ms.model_identification((m,))
-            ms.model_selection()
-            candidates += ms.model_testing()
+            si = StructuralIdentification(train_features, train_labels, test_features, test_labels, cv_folds=10, verbose=True)
+            for m in self.si_models:
+                si.model_identification((m,))
+            si.model_selection()
+            candidates += si.model_testing()
 
         candidates = [list(g) for _, g in groupby(sorted(candidates, key=lambda x: str(x.model)), lambda x: str(x.model))]
         candidates = sorted([sorted(l, reverse=True, key=lambda c: c.test_auc) for l in candidates], reverse=True, key=lambda x: statistics.mean(c.test_auc for c in x))
@@ -313,15 +313,19 @@ class MachineLearningProcedure:
         for l in candidates_lists:
             tmp_auc = [c.test_auc for c in l]
             print("model: {}".format(str(l[0].model)))
-            print("\tPerformance (AUC) -> avg: {}, stdev: {}, min: {}, max: {}".format(
-                round(statistics.mean(tmp_auc), 5), round(statistics.stdev(tmp_auc), 5), round(min(tmp_auc), 5), round(max(tmp_auc), 5)))
+            if len(tmp_auc) > 1:
+                print("\tPerformance (AUC) -> avg: {}, stdev: {}, min: {}, max: {}".format(
+                    round(statistics.mean(tmp_auc), 5), round(statistics.stdev(tmp_auc), 5), round(min(tmp_auc), 5), round(max(tmp_auc), 5)))
+            else:
+                print("\tPerformance (AUC) -> {}".format(round(tmp_auc[0], 5)))
 
     # MODEL IDENTIFICATION
 
-    def model_identification(self, variant):
+    def parametric_identification(self, variant):
         f1, f2 = ("serialized_df/features_{}".format(variant) + "_short" * self.short_ds,
                   "serialized_df/labels_{}".format(variant) + "_short" * self.short_ds)
 
+        # prepare datasets
         res = dict()
         features, labels = pd.read_pickle(f1), pd.read_pickle(f2)
         for i in range(self.exp_rounds):
@@ -331,16 +335,16 @@ class MachineLearningProcedure:
             train_features, train_labels, test_features, test_labels = dp.get_train_test_datasets()
 
             # Train models with CV and test performance on unused test set
-            for model, par in self.mi_pars:
-                mi = ModelIdentification(train_features, train_labels, test_features, test_labels, cv_folds=5, verbose=True)
+            for model, par in self.pi_pars:
+                pi = ParametricIdentification(train_features, train_labels, test_features, test_labels, cv_folds=5, verbose=True)
                 if model in res:
                     if par in res[model]:
-                        res[model][par] += mi.model_identification(model, par)
+                        res[model][par] += pi.parametric_identification(model, par)
                     else:
-                        res[model][par] = mi.model_identification(model, par)
+                        res[model][par] = pi.parametric_identification(model, par)
                 else:
                     res[model] = dict()
-                    res[model][par] = mi.model_identification(model, par)
+                    res[model][par] = pi.parametric_identification(model, par)
 
         # split results by parameter value (easier manipulation to plot results)
         res2 = dict()
@@ -365,9 +369,12 @@ class MachineLearningProcedure:
                 for par_val, results in tmp_res:
                     tmp_auc = [statistics.mean(r.mi_auc) for r in results]
                     print("model: {} {}={}".format(m, par, par_val))
-                    print("\tPerformance (AUC) -> avg: {}, stdev: {}, min: {}, max: {}".format(
-                        round(statistics.mean(tmp_auc), 5), round(statistics.stdev(tmp_auc), 5), round(min(tmp_auc), 5),
-                        round(max(tmp_auc), 5)))
+                    if len(tmp_auc) > 1:
+                        print("\tPerformance (AUC) -> avg: {}, stdev: {}, min: {}, max: {}".format(
+                            round(statistics.mean(tmp_auc), 5), round(statistics.stdev(tmp_auc), 5), round(min(tmp_auc), 5),
+                            round(max(tmp_auc), 5)))
+                    else:
+                        print("\tPerformance (AUC) -> {}".format(round(tmp_auc[0], 5)))
 
         for m in res:
             for p in res[m]:
@@ -421,7 +428,7 @@ class MachineLearningProcedure:
 
             # Use previously trained model on processed challenge data
             out["id"] = resp_id
-            out[variant] = ModelSelection.model_exploitation(model, features)
+            out[variant] = StructuralIdentification.model_exploitation(model, features)
 
         pd.DataFrame({
             "respondent_id": out["id"],

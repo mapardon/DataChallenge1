@@ -9,10 +9,10 @@ from sklearn.metrics import roc_auc_score
 from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
 
-from ModelBase import ExperimentResult, ModelBase
+from ModelIdentification import ExperimentResult, ModelIdentification
 
 
-class ExperimentResultMs(ExperimentResult):
+class ExperimentResultSi(ExperimentResult):
     def __init__(self, model_tag, model, mi_auc, test_auc, par_tag, par_value, is_reg_model, is_bag=False, estimator_tag=None):
         super().__init__(model_tag, model, par_tag, par_value, is_reg_model, is_bag, estimator_tag)
         self.mi_auc: list[float] | None = mi_auc
@@ -22,14 +22,14 @@ class ExperimentResultMs(ExperimentResult):
         return "{} ({}: {}): {}".format(self.model_tag, self.par_tag, self.par_value, self.test_auc)
 
 
-class ModelSelection(ModelBase):
+class StructuralIdentification(ModelIdentification):
     """
         Train [and compare] most promising models with hyperparameters defined in model identification
     """
     def __init__(self, train_features: pd.DataFrame, train_labels: pd.DataFrame, test_features: pd.DataFrame,
                  test_labels: pd.DataFrame, cv_folds: int, verbose=False):
         super().__init__(train_features, train_labels, test_features, test_labels, cv_folds, verbose)
-        self.candidates: list[ExperimentResultMs] = list()
+        self.candidates: list[ExperimentResultSi] = list()
 
     @staticmethod
     def model_exploitation(model, test_features: pd.DataFrame):
@@ -56,7 +56,7 @@ class ModelSelection(ModelBase):
             print("\n * MODEL TESTING *")
             print(" -> performance:")
             for c in self.candidates:
-                ModelSelection.display_training_result(c, "test")
+                StructuralIdentification.display_training_result(c, "test")
 
         return self.candidates
 
@@ -76,7 +76,7 @@ class ModelSelection(ModelBase):
                                                       subsample=0.75, min_samples_split=2, max_depth=3), "loss", "log_loss"),
                    "bc": (BaggingClassifier(estimator=GradientBoostingClassifier(loss="log_loss", n_estimators=200, subsample=0.75, min_samples_split=2, max_depth=3), n_estimators=10),
                           "# estimators", 10)}[model]
-        self.candidates.append(ExperimentResultMs(model, m, float(), float(), par_tag, par_val, type(m) is LinearRegression, model == "bc", "gbc" if m == "bc" else None))
+        self.candidates.append(ExperimentResultSi(model, m, float(), float(), par_tag, par_val, type(m) is LinearRegression, model == "bc", "gbc" if m == "bc" else None))
 
     # Methods corresponding to the "structural identification" step for the different model types
 
@@ -90,62 +90,62 @@ class ModelSelection(ModelBase):
             print("\n  * MODEL IDENTIFICATION *")
             print(" -> CV performance:")
             for c in sorted(self.candidates, reverse=True, key=lambda x: statistics.mean(x.mi_auc)):
-                ModelSelection.display_training_result(c, "mi")
+                StructuralIdentification.display_training_result(c, "mi")
 
     def lm(self):
         # Structural and parametric identification
         lm = LinearRegression()
         auc = self.parametric_identification_cv(lm, True)
-        self.candidates.append(ExperimentResultMs("lm", lm, auc, None, str(), None, True, False, None))
+        self.candidates.append(ExperimentResultSi("lm", lm, auc, None, str(), None, True, False, None))
 
     def lr(self):
         lr = LogisticRegression(max_iter=100000)
         auc = self.parametric_identification_cv(lr, False)
-        self.candidates.append(ExperimentResultMs("lr", lr, auc, None, "max_iter", 100000, False, False, None))
+        self.candidates.append(ExperimentResultSi("lr", lr, auc, None, "max_iter", 100000, False, False, None))
 
     def ridge(self):
         for alpha in [0.1, 0.5, 1.0, 5.0, 10.0, 20.0]:
             ridge = RidgeClassifier(alpha=alpha)
             auc = self.parametric_identification_cv(ridge, True)
-            self.candidates.append(ExperimentResultMs("ridge", ridge, auc, None, "alpha", alpha, True, False, None))
+            self.candidates.append(ExperimentResultSi("ridge", ridge, auc, None, "alpha", alpha, True, False, None))
 
     def tree(self):
         for c in ["entropy", "gini", "log_loss"]:
             for s in ["best", "random"]:
                 dtree = DecisionTreeClassifier(criterion=c, splitter=s)
                 auc = self.parametric_identification_cv(dtree, False)
-                self.candidates.append(ExperimentResultMs("dtree", dtree, auc, None, "criterion-splitter", "{}, {}".format(c, s), False, False, None))
+                self.candidates.append(ExperimentResultSi("dtree", dtree, auc, None, "criterion-splitter", "{}, {}".format(c, s), False, False, None))
 
     def forest(self):
         for c in ["entropy", "gini", "log_loss"]:
             for n in [10, 20, 50, 100]:
                 rf = RandomForestClassifier(criterion=c, n_estimators=n)
                 auc = self.parametric_identification_cv(rf, False)
-                self.candidates.append(ExperimentResultMs("randforest", rf, auc, None, "criterion-ntrees", "{}, {}".format(c, n), False, False, None))
+                self.candidates.append(ExperimentResultSi("randforest", rf, auc, None, "criterion-ntrees", "{}, {}".format(c, n), False, False, None))
 
     def ada(self):
         for n in (300, 400, 500):
             ada = AdaBoostClassifier(estimator=None, n_estimators=n, algorithm="SAMME")
             auc = self.parametric_identification_cv(ada, False)
-            self.candidates.append(ExperimentResultMs("ada", ada, auc, None, "n_estimators", n, False, False, None))
+            self.candidates.append(ExperimentResultSi("ada", ada, auc, None, "n_estimators", n, False, False, None))
 
     def gbc(self):
         for s in [0.75, 1.0]:
             gbc = GradientBoostingClassifier(loss="log_loss", n_estimators=250, subsample=s, min_samples_split=2, max_depth=3)
             auc = self.parametric_identification_cv(gbc, False)
-            self.candidates.append(ExperimentResultMs("gbc", gbc, auc, None, "subsample", s, False, False, None))
+            self.candidates.append(ExperimentResultSi("gbc", gbc, auc, None, "subsample", s, False, False, None))
 
     def bc(self):
         for ne in [10, 20]:
             estimator = GradientBoostingClassifier(loss="log_loss", n_estimators=200, subsample=0.75, min_samples_split=2, max_depth=3)
             bc = BaggingClassifier(estimator=estimator, n_estimators=ne)
             auc = self.parametric_identification_cv(bc, False)
-            self.candidates.append(ExperimentResultMs("bc", bc, auc, None, "# estimators", ne, False, True, "GBC"))
+            self.candidates.append(ExperimentResultSi("bc", bc, auc, None, "# estimators", ne, False, True, "GBC"))
 
     def nn(self):
         nn = MLPClassifier(hidden_layer_sizes=[100], activation="logistic", solver="sgd", max_iter=300)
         auc = self.parametric_identification_cv(nn, False)
-        self.candidates.append(ExperimentResultMs("nn", nn, auc, None, "act_f", "logistic", False, False, None))
+        self.candidates.append(ExperimentResultSi("nn", nn, auc, None, "act_f", "logistic", False, False, None))
 
         # TODO ensemble model with nn
 

@@ -98,7 +98,6 @@ class DataPreprocessing:
         # shuffle dataset (and reset indexes)
         ds = features
         ds = pd.concat([ds, labels[[labels.columns.to_list()[-1]]]], axis="columns")
-        #ds[[labels.columns.to_list()[-1]]] = labels[[labels.columns.to_list()[-1]]]
         ds = ds.sample(frac=1)
         ds.reset_index(inplace=True, drop=True)
 
