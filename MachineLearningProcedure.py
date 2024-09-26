@@ -16,6 +16,8 @@ MODELS_SAVE = "models_trained_save_{}"
 
 
 class PreprocCandidate:
+    """ Struct-like object to store (in one place) all parameters for data preprocessing + estimation of performance
+     (auc) of this preprocessing configuration """
     def __init__(self, dp_model=None, auc=None, imp_num=None, imp_obj=None, out_detect=None, out_detect_res=None,
                  scaler=None, numerizer=None, feat_selector=None, corr_features_out=None, selected_features=None):
         self.dp_model = dp_model
@@ -42,8 +44,8 @@ class MachineLearningProcedure:
         Main class initiating different steps of the complete procedure
     """
 
-    def __init__(self, exp_rounds=5, variants=("h1n1", "flu"), steps=("pre", "id", "exp"), store=False,
-                 dp_model_tag="lm", pi_pars=(("gbc", "*"),), si_models=("lm",), short_ds=False):
+    def __init__(self, exp_rounds=5, variants=("h1n1", "flu"), steps=("pre", "id", "exp"), store=False, short_ds=False,
+                 dp_model_tag="lm", pi_pars=(("gbc", "*"),), si_models=("lm",)):
         """
         :param exp_rounds: How many times the whole procedure must be run
         :param variants: Which variant to treat in the procedure
@@ -119,7 +121,7 @@ class MachineLearningProcedure:
         outliers_res = dict()
         scaling_res = dict()
         feat_select_res = dict()
-        combination_res = dict()
+        combination_res = list()
 
         for i in range(self.exp_rounds):
 
@@ -170,12 +172,11 @@ class MachineLearningProcedure:
                     else:
                         feat_select_res[(numerizer, feat_select)] = [pc]
 
-        # Change experiments results to list because we need order on the results
+        # Change experiments results dicts to lists because we need order on the results
         imputation_res = sorted([imputation_res[k] for k in imputation_res], reverse=True, key=lambda x: statistics.mean([c.auc for c in x]))
         outliers_res = sorted([outliers_res[k] for k in outliers_res], reverse=True, key=lambda x: statistics.mean([c.auc for c in x]))
         scaling_res = sorted([scaling_res[k] for k in scaling_res], reverse=True, key=lambda x: statistics.mean([c.auc for c in x]))
         feat_select_res = sorted([feat_select_res[k] for k in feat_select_res], reverse=True, key=lambda x: statistics.mean([c.auc for c in x]))
-        combination_res = sorted([combination_res[k] for k in combination_res], reverse=True, key=lambda x: statistics.mean([c.auc for c in x]))
 
         # Attempt with combination of the best parameters value of previous experiments
         pc = PreprocCandidate(imp_num=imputation_res[0][0].imp_num, imp_obj=imputation_res[0][0].imp_obj,
@@ -193,14 +194,15 @@ class MachineLearningProcedure:
             print(title)
             self.format_data_exp_output(res)
 
-        # Store configuration having shown the highest performance average over experiments
+        # Retain configuration having shown the highest performance average over experiments
         self.final_confs[variant] = max(imputation_res + outliers_res + scaling_res + feat_select_res + combination_res,
                                         key=lambda x: statistics.mean([c.auc for c in x]) if len(x) > 1 else x[0].auc)[0]
 
+        # temporary, just wanna test something
         self.final_confs[variant].numerizer = "one-hot"
         self.final_confs[variant].feat_selector = "RFE"
 
-        print("\n * Final configuration")
+        print("\n * Final configuration ({})".format(variant))
         print(self.final_confs[variant], self.final_confs[variant].selected_features)
 
         if self.store:
@@ -211,8 +213,7 @@ class MachineLearningProcedure:
         """
         Train a linear model with the provided preprocessing parameters to evaluate their influence on model performance
 
-        :params: parameters for different preprocessing phases
-
+        :param: parameters for different preprocessing phases
         :return: the object is accessed by reference (normally)
         """
 
@@ -234,13 +235,14 @@ class MachineLearningProcedure:
         pc.auc = candidates[0].test_auc
 
     @staticmethod
-    def store_datasets(variant, conf):
+    def store_datasets(variant: str, conf: PreprocCandidate):
         """ Apply preprocessing operations (conf) on dataset and store it on disk to allow future fast loading of
         preprocessed dataset """
+
         ds = DataPreprocessing().training_preprocessing_pipeline("data/training_set_features.csv",
                                                                  "data/training_set_labels_{}.csv".format(variant),
                                                                  conf.imp_num, conf.imp_obj, conf.out_detect,
-                                                                 conf.numerizer, conf.scaler, conf.selected_features)
+                                                                 conf.numerizer, conf.scaler, conf.feat_selector)
 
         features, labels = pd.concat([ds[0], ds[2]], axis="rows"), pd.concat([ds[1], ds[3]], axis="rows")
         features.to_pickle("serialized_df/features_{}".format(variant))

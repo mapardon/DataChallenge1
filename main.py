@@ -19,16 +19,26 @@ def multi_proc():
 
 
 def uni_proc():
-    # steps: pre, pi, si, exp
-    mi_pars = (("gbc", "n_estimators"),)
-    MachineLearningProcedure(3, variants=("h1n1", "seas"), steps=("pi",), store=True,
-                             dp_model_tag="lr", pi_pars=mi_pars, si_models=("lm", "lr", "nn",), short_ds=False).main()
+    n_exp_rounds = 2
+    variants = ("h1n1", "seas")
+    steps = ("pre",)  # steps: pre, pi, si, exp
+    dp_model_tag = "lr"
+    pi_pars = (("gbc", "n_estimators"),)
+    si_models = ("lm", "lr")
+    MachineLearningProcedure(n_exp_rounds, variants=variants, steps=steps, store=True, short_ds=False,
+                             dp_model_tag=dp_model_tag, pi_pars=pi_pars, si_models=si_models).main()
 
 
 def test():
-    mi_pars = (("gbc", "n_estimators"),)
-    MachineLearningProcedure(3, variants=("h1n1",), steps=("pre",), store=False,
-                             dp_model_tag="lr", pi_pars=mi_pars, si_models=("lm", "lr", "nn",), short_ds=True).main()
+    n_exp_rounds = 2
+    variants = ("h1n1", "seas")
+    steps = ("pre",)  # steps: pre, pi, si, exp
+    short_ds = True
+    dp_model_tag = "lr"
+    pi_pars = (("gbc", "n_estimators"),)
+    si_models = ("lm", "lr")
+    MachineLearningProcedure(n_exp_rounds, variants=variants, steps=steps, store=False, short_ds=short_ds,
+                             dp_model_tag=dp_model_tag, pi_pars=pi_pars, si_models=si_models).main()
 
 
 if __name__ == '__main__':
