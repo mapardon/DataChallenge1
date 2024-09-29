@@ -1,3 +1,4 @@
+import numpy
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
@@ -272,7 +273,10 @@ class DataPreprocessing:
         :returns: final number of features selected by procedure, list of selected features """
 
         n_corr_removed = int()
-        if feat_selector in ["mut_inf", "f_stat"]:
+        if type(feat_selector) is list or type(feat_selector) is numpy.ndarray:
+            self.feature_selection_list(feat_selector)
+
+        elif feat_selector in ["mut_inf", "f_stat"]:
             n_corr_removed = self.remove_corr_features()
             self.feature_selection_proc(feat_selector)
 
@@ -283,9 +287,6 @@ class DataPreprocessing:
 
             # keep best-ranked features
             self.features = self.features[[c for c, cond in zip(self.features.columns.to_list(), selector.support_) if cond]]
-
-        elif type(feat_selector) is list:
-            self.feature_selection_list(feat_selector)
 
         self.feat_sel_res = n_corr_removed, len(self.features.columns.to_list()), self.features.columns.to_list()
 

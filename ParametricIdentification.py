@@ -31,8 +31,8 @@ class ParametricIdentification(ModelIdentification):
         super().__init__(train_features, train_labels, test_features, test_labels, cv_folds, verbose)
         self.candidates: list[ExperimentResultPi] = list()
 
-        self.models_dict = {"nns": self.nn_short, "nnl": self.nn_long, "nn": self.nn, "ada": self.ada, "gbc": self.gbc,
-                            "hgb": self.hgb, "bc": self.bc, "bcl": self.bc_long}
+        self.models_dict = {"nn": self.nn, "ada": self.ada, "gbc": self.gbc, "hgb": self.hgb, "bc": self.bc,
+                            "bcl": self.bc_long}
 
     def parametric_identification(self, model: str, par: str):
         self.models_dict[model]() if par is None else self.models_dict[model](par)
@@ -76,7 +76,7 @@ class ParametricIdentification(ModelIdentification):
                 self.candidates.append(ExperimentResultPi("gbc", gbc, auc, "min_sample_split", mss, False, False))
 
         elif par == "max_depth":
-            for max_depth in [2, 3, 4, 5, 10, 20]:
+            for max_depth in [2, 3, 4, 5, 10]:
                 gbc = GradientBoostingClassifier(loss="log_loss", max_depth=max_depth)
                 auc = self.parametric_identification_cv(gbc, False)
                 self.candidates.append(ExperimentResultPi("gbc", gbc, auc, "max_depth", max_depth, False, False))
@@ -114,45 +114,34 @@ class ParametricIdentification(ModelIdentification):
 
     def nn(self, par="hl1"):
         if par == "hl1":
-            for hl in [(20,), (50,), (100,), (200,), (500,)]:
-                nn = MLPClassifier(hidden_layer_sizes=hl, activation="logistic")
+            for hl in [(50,), (100,), (150,), (200,)]:
+                nn = MLPClassifier(hidden_layer_sizes=hl, activation="logistic", max_iter=300)
                 auc = self.parametric_identification_cv(nn, False)
                 self.candidates.append(ExperimentResultPi("nn", nn, auc, "hidden_layers", hl[0], False, False))
 
         elif par == "hl2":
-            for hls in [(50, 50), (100, 100)]:
-                nn = MLPClassifier(hidden_layer_sizes=hls, activation="logistic")
+            for hls in [(50, 50), (100, 50)]:
+                nn = MLPClassifier(hidden_layer_sizes=hls, activation="logistic", max_iter=300)
                 auc = self.parametric_identification_cv(nn, False)
-                self.candidates.append(ExperimentResultPi("nn", nn, auc, "hidden_layers", hls, False, False))
+                self.candidates.append(ExperimentResultPi("nn", nn, auc, "hidden_layers", str(hls), False, False))
 
         elif par == "act_f":
             for actf in ['logistic', 'tanh', 'relu']:
-                nn = MLPClassifier(hidden_layer_sizes=(50,), activation=actf)
+                nn = MLPClassifier(hidden_layer_sizes=(50,), activation=actf, max_iter=300)
                 auc = self.parametric_identification_cv(nn, False)
                 self.candidates.append(ExperimentResultPi("nn", nn, auc, "act_f", actf, False, False))
 
         elif par == "solver":
             for solver in ['lbfgs', 'sgd', 'adam']:
-                nn = MLPClassifier(hidden_layer_sizes=(50,), activation="logistic", solver=solver)
+                nn = MLPClassifier(hidden_layer_sizes=(50,), activation="logistic", solver=solver, max_iter=300)
                 auc = self.parametric_identification_cv(nn, False)
                 self.candidates.append(ExperimentResultPi("nn", nn, auc, "solver", solver, False, False))
 
         elif par == "miter":
             for miter in [100, 200, 300, 400, 500]:
-                nn = MLPClassifier(hidden_layer_sizes=(100,), activation="logistic", solver="sgd", max_iter=miter)
+                nn = MLPClassifier(hidden_layer_sizes=(50,), activation="logistic", solver="sgd", max_iter=miter)
                 auc = self.parametric_identification_cv(nn, False)
                 self.candidates.append(ExperimentResultPi("nn", nn, auc, "max_iter", miter, False, False))
-
-    def nn_short(self, par=None):
-        nn = MLPClassifier(hidden_layer_sizes=(50,), activation="logistic", solver="sgd", max_iter=100)
-        auc = self.parametric_identification_cv(nn, False)
-        self.candidates.append(ExperimentResultPi("nn", nn, auc, "nn_short_test", 50, False, False))
-
-    def nn_long(self):
-        nn = MLPClassifier(hidden_layer_sizes=(500,), activation="logistic", solver="sgd", learning_rate="adaptive",
-                           max_iter=1000, early_stopping=True)
-        auc = self.parametric_identification_cv(nn, False)
-        self.candidates.append(ExperimentResultPi("nn", nn, auc, "nn_full_stuff", (500,), False, False))
 
     # Ensemble of estimators
 
@@ -178,33 +167,28 @@ class ParametricIdentification(ModelIdentification):
                     auc = self.parametric_identification_cv(ada, False)
                     self.candidates.append(ExperimentResultPi("ada", ada, auc, "n_estimators", ne, False, True, n))
 
-    def bc(self, par="_uni"):
-        if "_uni" in par:
-            estimators, names = [None, DecisionTreeClassifier(criterion="log_loss", splitter="best"),
-                                 DecisionTreeClassifier(criterion="log_loss", splitter="random"),
-                                 LogisticRegression(max_iter=100000)], ['None', 'DTC-best', 'DTC-random', 'LR']
-        else:  # "_ens" in par
-            estimators, names = [GradientBoostingClassifier(loss="log_loss", n_estimators=200, subsample=0.75,
-                                 min_samples_split=2, max_depth=3)], ['GBC']
+    def bc(self, par="max_features_lr"):
+        if "lr" in par:
+            estimator, name = LogisticRegression(max_iter=100000), 'LR'
+        elif "tree" in par:
+            estimator, name = DecisionTreeClassifier(criterion="log_loss", splitter="best"), 'DTC-best'
+        elif "gbc" in par:
+            estimator, name = (GradientBoostingClassifier(loss="log_loss", n_estimators=100, subsample=0.5, min_samples_split=3, max_depth=3),
+                               'GBC')
+        else:
+            raise ValueError("Parametric identification for bagging classifier must specify an estimator class")
 
-        for e, n in zip(estimators, names):
-            if "max_features" in par:
-                for mf in [0.5, 0.75, 1.0]:
-                    bc = BaggingClassifier(estimator=e, max_features=mf)
-                    auc = self.parametric_identification_cv(bc, False)
-                    self.candidates.append(ExperimentResultPi("bc", bc, auc, "max_features", mf, False, True, n))
+        if "max_features" in par:
+            for mf in [0.5, 0.75, 1.0]:
+                bc = BaggingClassifier(estimator=estimator, max_features=mf)
+                auc = self.parametric_identification_cv(bc, False)
+                self.candidates.append(ExperimentResultPi("bc", bc, auc, "max_features", mf, False, True, str(estimator)))
 
-            elif par == "n_estimators_uni":
-                for ne in [10, 20, 50, 100, 200]:
-                    bc = BaggingClassifier(estimator=e, n_estimators=ne)
-                    auc = self.parametric_identification_cv(bc, False)
-                    self.candidates.append(ExperimentResultPi("bc", bc, auc, "n_estimators", ne, False, True, n))
-
-            elif par == "n_estimators_ens":
-                for ne in [10, 15, 20]:
-                    bc = BaggingClassifier(estimator=e, n_estimators=ne)
-                    auc = self.parametric_identification_cv(bc, False)
-                    self.candidates.append(ExperimentResultPi("bc", bc, auc, "n_estimators", ne, False, True, n))
+        elif "n_estimators" in par:
+            for ne in [10, 20, 40, 60]:
+                bc = BaggingClassifier(estimator=estimator, n_estimators=ne)
+                auc = self.parametric_identification_cv(bc, False)
+                self.candidates.append(ExperimentResultPi("bc", bc, auc, "n_estimators", ne, False, True, str(estimator)))
 
     def bc_long(self, par):
         # par = h1n1/seas

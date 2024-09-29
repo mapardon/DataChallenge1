@@ -270,64 +270,12 @@ class MachineLearningProcedure:
                 print("\t-> avg: {}, stdev: {}".format(round(statistics.mean(aucs), 5), round(statistics.stdev(aucs), 5)),
                       outliers_removed, corr_features_removed, n_features_final, sep=", ")
 
-    # MODEL SELECTION
-
-    def structural_identification(self, variant):
-        """
-            Using the datasets pre-processed with the previously chosen configuration, we now test the performance of
-            different learning algorithms
-        """
-
-        f1, f2 = ("serialized_df/features_{}".format(variant), "serialized_df/labels_{}".format(variant))
-        if self.short_ds:
-            f1, f2 = f1 + "_short", f2 + "_short"
-
-        candidates = list()
-        for i in range(self.exp_rounds):
-            # Load & reshuffle preprocessed dataset
-            features, labels = pd.read_pickle(f1), pd.read_pickle(f2)
-            dp = DataPreprocessing(self.short_ds)
-            dp.shuffle_datasets(features, pd.DataFrame(labels))
-            train_features, train_labels, test_features, test_labels = dp.get_train_test_datasets()
-
-            # Train models with CV and test performance on unused test set
-            si = StructuralIdentification(train_features, train_labels, test_features, test_labels, cv_folds=10, verbose=True)
-            for m in self.si_models:
-                si.model_identification((m,))
-            si.model_selection()
-            candidates += si.model_testing()
-
-        candidates = [list(g) for _, g in groupby(sorted(candidates, key=lambda x: str(x.model)), lambda x: str(x.model))]
-        candidates = sorted([sorted(l, reverse=True, key=lambda c: c.test_auc) for l in candidates], reverse=True, key=lambda x: statistics.mean(c.test_auc for c in x))
-
-        # Display results
-        MachineLearningProcedure.format_model_exp_output(variant, candidates)
-
-        self.final_models[variant] = candidates[0][0]
-
-        if self.store:
-            pickle.dump(self.final_models[variant], open(MODELS_SAVE.format(variant), "wb"))
-
-    @staticmethod
-    def format_model_exp_output(variant, candidates_lists):
-        """ :param candidates_lists: list of lists of candidates (several experiments with the same estimator) """
-        print("\n * Final {} candidates".format(variant))
-        for l in candidates_lists:
-            tmp_auc = [c.test_auc for c in l]
-            print("model: {}".format(str(l[0].model)))
-            if len(tmp_auc) > 1:
-                print("\tPerformance (AUC) -> avg: {}, stdev: {}, min: {}, max: {}".format(
-                    round(statistics.mean(tmp_auc), 5), round(statistics.stdev(tmp_auc), 5), round(min(tmp_auc), 5), round(max(tmp_auc), 5)))
-            else:
-                print("\tPerformance (AUC) -> {}".format(round(tmp_auc[0], 5)))
-
     # MODEL IDENTIFICATION
 
     def parametric_identification(self, variant):
         f1, f2 = ("serialized_df/features_{}".format(variant) + "_short" * self.short_ds,
                   "serialized_df/labels_{}".format(variant) + "_short" * self.short_ds)
 
-        # prepare datasets
         res = dict()
         features, labels = pd.read_pickle(f1), pd.read_pickle(f2)
         for i in range(self.exp_rounds):
@@ -406,6 +354,55 @@ class MachineLearningProcedure:
         else:
             plt.show()
 
+    def structural_identification(self, variant):
+        """
+            Using the datasets pre-processed with the previously chosen configuration, we now test the performance of
+            different learning algorithms
+        """
+
+        f1, f2 = ("serialized_df/features_{}".format(variant), "serialized_df/labels_{}".format(variant))
+        if self.short_ds:
+            f1, f2 = f1 + "_short", f2 + "_short"
+
+        candidates = list()
+        for i in range(self.exp_rounds):
+            # Load & reshuffle preprocessed dataset
+            features, labels = pd.read_pickle(f1), pd.read_pickle(f2)
+            dp = DataPreprocessing(self.short_ds)
+            dp.shuffle_datasets(features, pd.DataFrame(labels))
+            train_features, train_labels, test_features, test_labels = dp.get_train_test_datasets()
+
+            # Train models with CV and test performance on unused test set
+            si = StructuralIdentification(train_features, train_labels, test_features, test_labels, cv_folds=10, verbose=True)
+            for m in self.si_models:
+                si.parametric_identification((m,))
+            si.model_selection()
+            candidates += si.model_testing(variant)
+
+        candidates = [list(g) for _, g in groupby(sorted(candidates, key=lambda x: str(x.model)), lambda x: str(x.model))]
+        candidates = sorted([sorted(l, reverse=True, key=lambda c: c.test_auc) for l in candidates], reverse=True, key=lambda x: statistics.mean(c.test_auc for c in x))
+
+        # Display results
+        MachineLearningProcedure.format_model_exp_output(variant, candidates)
+
+        self.final_models[variant] = candidates[0][0]
+
+        if self.store:
+            pickle.dump(self.final_models[variant], open(MODELS_SAVE.format(variant), "wb"))
+
+    @staticmethod
+    def format_model_exp_output(variant, candidates_lists):
+        """ :param candidates_lists: list of lists of candidates (several experiments with the same estimator) """
+        print("\n * Final {} candidates".format(variant))
+        for l in candidates_lists:
+            tmp_auc = [c.test_auc for c in l]
+            print("model: {}".format(str(l[0].model)))
+            if len(tmp_auc) > 1:
+                print("\tPerformance (AUC) -> avg: {}, stdev: {}, min: {}, max: {}".format(
+                    round(statistics.mean(tmp_auc), 5), round(statistics.stdev(tmp_auc), 5), round(min(tmp_auc), 5), round(max(tmp_auc), 5)))
+            else:
+                print("\tPerformance (AUC) -> {}".format(round(tmp_auc[0], 5)))
+
     # MODEL EXPLOITATION
 
     def model_exploitation(self):
@@ -448,5 +445,7 @@ def floatable(f):
     try:
         float(f)
     except ValueError:
+        is_float = False
+    except TypeError:
         is_float = False
     return is_float

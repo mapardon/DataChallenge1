@@ -40,7 +40,7 @@ class StructuralIdentification(ModelIdentification):
         is_reg_model = type(model) is LinearRegression or type(model) is RidgeClassifier
         return expit(model.predict(test_features)) if is_reg_model else model.predict_proba(test_features)[:, 1]
 
-    def model_testing(self):
+    def model_testing(self, variant=None):
         """ Train selected candidates on complete training set and assess performance on unused test set. """
 
         for i in range(len(self.candidates)):
@@ -53,7 +53,7 @@ class StructuralIdentification(ModelIdentification):
 
         # print results of testing of most promising models
         if self.verbose:
-            print("\n * MODEL TESTING *")
+            print("\n * MODEL TESTING ({}) *".format(variant))
             print(" -> performance:")
             for c in self.candidates:
                 StructuralIdentification.display_training_result(c, "test")
@@ -80,12 +80,15 @@ class StructuralIdentification(ModelIdentification):
 
     # Methods corresponding to the "structural identification" step for the different model types
 
-    def model_identification(self, models):
+    def parametric_identification(self, models, variant=None):
         for m in models:
-            {"lm": self.lm, "lr": self.lr, "ridge": self.ridge, "tree": self.tree, "forest": self.forest,
-             "ada": self.ada, "gbc": self.gbc, "bc": self.bc, "nn": self.nn}[m]()
+            if m in ["lm", "lr", "ridge", "tree", "forest", "ada", "nn"]:
+                {"lm": self.lm, "lr": self.lr, "ridge": self.ridge, "tree": self.tree, "forest": self.forest,
+                 "ada": self.ada, "nn": self.nn}[m]()
+            else:
+                {"bc": self.bc, "gbc": self.gbc}[m](variant)
 
-        # print results of model identification operations
+                # print results of model identification operations
         if self.verbose:
             print("\n  * MODEL IDENTIFICATION *")
             print(" -> CV performance:")
@@ -129,18 +132,25 @@ class StructuralIdentification(ModelIdentification):
             auc = self.parametric_identification_cv(ada, False)
             self.candidates.append(ExperimentResultSi("ada", ada, auc, None, "n_estimators", n, False, False, None))
 
-    def gbc(self):
-        for s in [0.75, 1.0]:
-            gbc = GradientBoostingClassifier(loss="log_loss", n_estimators=250, subsample=s, min_samples_split=2, max_depth=3)
-            auc = self.parametric_identification_cv(gbc, False)
-            self.candidates.append(ExperimentResultSi("gbc", gbc, auc, None, "subsample", s, False, False, None))
+    def gbc(self, variant):
+        if variant == "h1n1":
+            gbc = GradientBoostingClassifier(loss="log_loss", n_estimators=100, subsample=0.5, min_samples_split=3, max_depth=3)
+            #gbc = GradientBoostingClassifier(loss="log_loss", subsample=0.5)
+        else:
+            gbc = GradientBoostingClassifier(loss="log_loss", n_estimators=200, subsample=0.5, min_samples_split=3, max_depth=4)
+            gbc = GradientBoostingClassifier(loss="log_loss", subsample=0.5)
+        auc = self.parametric_identification_cv(gbc, False)
+        self.candidates.append(ExperimentResultSi("gbc", gbc, auc, None, "gbc_si", str(), False, False, None))
 
-    def bc(self):
-        for ne in [10, 20]:
-            estimator = GradientBoostingClassifier(loss="log_loss", n_estimators=200, subsample=0.75, min_samples_split=2, max_depth=3)
-            bc = BaggingClassifier(estimator=estimator, n_estimators=ne)
-            auc = self.parametric_identification_cv(bc, False)
-            self.candidates.append(ExperimentResultSi("bc", bc, auc, None, "# estimators", ne, False, True, "GBC"))
+    def bc(self, variant):
+        if variant == "h1n1":
+            estimator = GradientBoostingClassifier(loss="log_loss", n_estimators=100, subsample=0.5, min_samples_split=3, max_depth=3)
+            bc = BaggingClassifier(estimator=estimator, max_features=1.0, n_estimators=60)
+        else:
+            estimator = GradientBoostingClassifier(loss="log_loss", subsample=0.5)
+            bc = BaggingClassifier(estimator=estimator, max_features=1.0, n_estimators=40)
+        auc = self.parametric_identification_cv(bc, False)
+        self.candidates.append(ExperimentResultSi("bc", bc, auc, None, "bc_gbc_si", str(), False, True, "GBC"))
 
     def nn(self):
         nn = MLPClassifier(hidden_layer_sizes=[100], activation="logistic", solver="sgd", max_iter=300)
